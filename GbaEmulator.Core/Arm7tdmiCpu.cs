@@ -47,6 +47,34 @@ public sealed class Arm7tdmiCpu
         }
     }
 
+    private void SetCarryFlagForAddition(uint left, uint right, uint result)
+    {
+        if (result < left)
+        {
+            Cpsr |= CarryFlag;
+        }
+        else
+        {
+            Cpsr &= ~CarryFlag;
+        }
+    }
+
+    private void SetOverflowFlagForAddition(uint left, uint right, uint result)
+    {
+        bool leftNegative = (left & 0x80000000) != 0;
+        bool rightNegative = (right & 0x80000000) != 0;
+        bool resultNegative = (result & 0x80000000) != 0;
+
+        if (leftNegative == rightNegative && leftNegative != resultNegative)
+        {
+            Cpsr |= OverflowFlag;
+        }
+        else
+        {
+            Cpsr &= ~OverflowFlag;
+        }
+    }
+
     private static bool IsDataProcessingImmediate(uint instruction)
     {
         return (instruction & 0x0E000000) == 0x02000000;
@@ -68,6 +96,11 @@ public sealed class Arm7tdmiCpu
         uint operand = DecodeImmediateOperand(instruction);
 
         _registers[destinationRegister] = operand;
+
+        if (ShouldUpdateFlags(instruction))
+        {
+            SetNegativeAndZeroFlags(operand);
+        }
     }
 
     private static uint DecodeImmediateOperand(uint instruction)
@@ -83,8 +116,17 @@ public sealed class Arm7tdmiCpu
         int sourceRegister = (int)((instruction >> 16) & 0xF);
         int destinationRegister = (int)((instruction >> 12) & 0xF);
         uint operand = DecodeImmediateOperand(instruction);
+        uint left = _registers[sourceRegister];
+        uint result = left + operand;
 
-        _registers[destinationRegister] = _registers[sourceRegister] + operand;
+        _registers[destinationRegister] = result;
+
+        if (ShouldUpdateFlags(instruction))
+        {
+            SetNegativeAndZeroFlags(result);
+            SetCarryFlagForAddition(left, operand, result);
+            SetOverflowFlagForAddition(left, operand, result);
+        }
     }
 
     private void ExecuteDataProcessingImmediate(uint instruction)
@@ -104,6 +146,32 @@ public sealed class Arm7tdmiCpu
         }
 
         throw new NotSupportedException($"Unsupported data processing immediate opcode: 0x{opcode:X}");
+    }
+
+    private static bool ShouldUpdateFlags(uint instruction)
+    {
+        return (instruction & (1u << 20)) != 0;
+    }
+
+    private void SetNegativeAndZeroFlags(uint result)
+    {
+        if ((result & 0x80000000) != 0)
+        {
+            Cpsr |= NegativeFlag;
+        }
+        else
+        {
+            Cpsr &= ~NegativeFlag;
+        }
+
+        if (result == 0)
+        {
+            Cpsr |= ZeroFlag;
+        }
+        else
+        {
+            Cpsr &= ~ZeroFlag;
+        }
     }
 
     private void ExecuteBranch(uint instruction)
