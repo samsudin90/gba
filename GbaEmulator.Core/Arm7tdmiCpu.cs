@@ -59,6 +59,18 @@ public sealed class Arm7tdmiCpu
         }
     }
 
+    private void SetCarryFlagForSubtraction(uint left, uint right)
+    {
+        if (left >= right)
+        {
+            Cpsr |= CarryFlag;
+        }
+        else
+        {
+            Cpsr &= ~CarryFlag;
+        }
+    }
+
     private void SetOverflowFlagForAddition(uint left, uint right, uint result)
     {
         bool leftNegative = (left & 0x80000000) != 0;
@@ -66,6 +78,22 @@ public sealed class Arm7tdmiCpu
         bool resultNegative = (result & 0x80000000) != 0;
 
         if (leftNegative == rightNegative && leftNegative != resultNegative)
+        {
+            Cpsr |= OverflowFlag;
+        }
+        else
+        {
+            Cpsr &= ~OverflowFlag;
+        }
+    }
+
+    private void SetOverflowFlagForSubtraction(uint left, uint right, uint result)
+    {
+        bool leftNegative = (left & 0x80000000) != 0;
+        bool rightNegative = (right & 0x80000000) != 0;
+        bool resultNegative = (result & 0x80000000) != 0;
+
+        if (leftNegative != rightNegative && leftNegative != resultNegative)
         {
             Cpsr |= OverflowFlag;
         }
@@ -129,9 +157,33 @@ public sealed class Arm7tdmiCpu
         }
     }
 
+    private void ExecuteSubImmediate(uint instruction)
+    {
+        int sourceRegister = (int)((instruction >> 16) & 0xF);
+        int destinationRegister = (int)((instruction >> 12) & 0xF);
+        uint operand = DecodeImmediateOperand(instruction);
+        uint left = _registers[sourceRegister];
+        uint result = left - operand;
+
+        _registers[destinationRegister] = result;
+
+        if (ShouldUpdateFlags(instruction))
+        {
+            SetNegativeAndZeroFlags(result);
+            SetCarryFlagForSubtraction(left, operand);
+            SetOverflowFlagForSubtraction(left, operand, result);
+        }
+    }
+
     private void ExecuteDataProcessingImmediate(uint instruction)
     {
         uint opcode = (instruction >> 21) & 0xF;
+
+        if (opcode == 0x2)
+        {
+            ExecuteSubImmediate(instruction);
+            return;
+        }
 
         if (opcode == 0x4)
         {

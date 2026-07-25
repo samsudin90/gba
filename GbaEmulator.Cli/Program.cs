@@ -27,14 +27,15 @@ Console.WriteLine($"Checksum Valid: {header.HasValidHeaderChecksum}");
 
 byte[] testRom =
 [
-    0x00, 0x00, 0xB0, 0xE3
+    0x0A, 0x10, 0xA0, 0xE3,
+    0x03, 0x00, 0x41, 0xE2
 ];
 
 MemoryBus testBus = new MemoryBus(testRom);
 Arm7tdmiCpu testCpu = new Arm7tdmiCpu(testBus);
 
 testCpu.Step();
+testCpu.Step();
 
+Console.WriteLine($"R1: {testCpu.GetRegister(1)}");
 Console.WriteLine($"R0: {testCpu.GetRegister(0)}");
-Console.WriteLine($"Z: {testCpu.ZeroFlagSet}");
-Console.WriteLine($"N: {testCpu.NegativeFlagSet}");
