@@ -1,0 +1,11 @@
+/Users/ilyas/Code/gba/GbaEmulator.Core/bin/Debug/net10.0/GbaEmulator.Core.deps.json
+/Users/ilyas/Code/gba/GbaEmulator.Core/bin/Debug/net10.0/GbaEmulator.Core.dll
+/Users/ilyas/Code/gba/GbaEmulator.Core/bin/Debug/net10.0/GbaEmulator.Core.pdb
+/Users/ilyas/Code/gba/GbaEmulator.Core/obj/Debug/net10.0/GbaEmulator.Core.GeneratedMSBuildEditorConfig.editorconfig
+/Users/ilyas/Code/gba/GbaEmulator.Core/obj/Debug/net10.0/GbaEmulator.Core.AssemblyInfoInputs.cache
+/Users/ilyas/Code/gba/GbaEmulator.Core/obj/Debug/net10.0/GbaEmulator.Core.AssemblyInfo.cs
+/Users/ilyas/Code/gba/GbaEmulator.Core/obj/Debug/net10.0/GbaEmulator.Core.csproj.CoreCompileInputs.cache
+/Users/ilyas/Code/gba/GbaEmulator.Core/obj/Debug/net10.0/GbaEmulator.Core.dll
+/Users/ilyas/Code/gba/GbaEmulator.Core/obj/Debug/net10.0/refint/GbaEmulator.Core.dll
+/Users/ilyas/Code/gba/GbaEmulator.Core/obj/Debug/net10.0/GbaEmulator.Core.pdb
+/Users/ilyas/Code/gba/GbaEmulator.Core/obj/Debug/net10.0/ref/GbaEmulator.Core.dll
