@@ -1,1 +1,6 @@
 /roms
+/GbaEmulator.Cli/bin
+/GbaEmulator.Cli/obj
+/GbaEmulator.Core/bin
+/GbaEmulator.Core/obj
+.DS_Store

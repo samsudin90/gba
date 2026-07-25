@@ -26,11 +26,8 @@ Console.WriteLine($"Header Checksum: 0x{header.HeaderChecksum:X2}");
 Console.WriteLine($"Checksum Valid: {header.HasValidHeaderChecksum}");
 
 MemoryBus bus = new MemoryBus(romBytes);
+Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
 
-byte b8 = bus.Read8(0x080000A0);
-ushort b16 = bus.Read16(0x080000A0);
-uint b32 = bus.Read32(0x080000A0);
-
-Console.WriteLine($"Read8 title start:  0x{b8:X2}");
-Console.WriteLine($"Read16 title start: 0x{b16:X4}");
-Console.WriteLine($"Read32 title start: 0x{b32:X8}");
+Console.WriteLine($"PC before step: 0x{cpu.Pc:X8}");
+cpu.Step();
+Console.WriteLine($"PC after step:  0x{cpu.Pc:X8}");
