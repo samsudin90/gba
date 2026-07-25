@@ -28,6 +28,8 @@ Console.WriteLine($"Checksum Valid: {header.HasValidHeaderChecksum}");
 MemoryBus bus = new MemoryBus(romBytes);
 Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
 
-Console.WriteLine($"PC before step: 0x{cpu.Pc:X8}");
-cpu.Step();
-Console.WriteLine($"PC after step:  0x{cpu.Pc:X8}");
+Console.WriteLine($"Z before: {cpu.ZeroFlagSet}");
+cpu.SetZeroFlagForTesting(true);
+Console.WriteLine($"Z after true: {cpu.ZeroFlagSet}");
+cpu.SetZeroFlagForTesting(false);
+Console.WriteLine($"Z after false: {cpu.ZeroFlagSet}");
