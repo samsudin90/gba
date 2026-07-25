@@ -25,11 +25,17 @@ Console.WriteLine($"Fixed Value 0x96: {header.HasValidFixedValue}");
 Console.WriteLine($"Header Checksum: 0x{header.HeaderChecksum:X2}");
 Console.WriteLine($"Checksum Valid: {header.HasValidHeaderChecksum}");
 
-MemoryBus bus = new MemoryBus(romBytes);
-Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+byte[] testRom =
+[
+    0x0A, 0x10, 0xA0, 0xE3,
+    0x05, 0x00, 0x81, 0xE2
+];
 
-Console.WriteLine($"Z before: {cpu.ZeroFlagSet}");
-cpu.SetZeroFlagForTesting(true);
-Console.WriteLine($"Z after true: {cpu.ZeroFlagSet}");
-cpu.SetZeroFlagForTesting(false);
-Console.WriteLine($"Z after false: {cpu.ZeroFlagSet}");
+MemoryBus testBus = new MemoryBus(testRom);
+Arm7tdmiCpu testCpu = new Arm7tdmiCpu(testBus);
+
+testCpu.Step();
+testCpu.Step();
+
+Console.WriteLine($"R1 after MOV: {testCpu.GetRegister(1)}");
+Console.WriteLine($"R0 after ADD: {testCpu.GetRegister(0)}");

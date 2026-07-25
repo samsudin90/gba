@@ -47,6 +47,65 @@ public sealed class Arm7tdmiCpu
         }
     }
 
+    private static bool IsDataProcessingImmediate(uint instruction)
+    {
+        return (instruction & 0x0E000000) == 0x02000000;
+    }
+
+    private static uint RotateRight(uint value, int amount)
+    {
+        if (amount == 0)
+        {
+            return value;
+        }
+
+        return (value >> amount) | (value << (32 - amount));
+    }
+
+    private void ExecuteMovImmediate(uint instruction)
+    {
+        int destinationRegister = (int)((instruction >> 12) & 0xF);
+        uint operand = DecodeImmediateOperand(instruction);
+
+        _registers[destinationRegister] = operand;
+    }
+
+    private static uint DecodeImmediateOperand(uint instruction)
+    {
+        uint immediate = instruction & 0xFF;
+        int rotate = (int)((instruction >> 8) & 0xF) * 2;
+
+        return RotateRight(immediate, rotate);
+    }
+
+    private void ExecuteAddImmediate(uint instruction)
+    {
+        int sourceRegister = (int)((instruction >> 16) & 0xF);
+        int destinationRegister = (int)((instruction >> 12) & 0xF);
+        uint operand = DecodeImmediateOperand(instruction);
+
+        _registers[destinationRegister] = _registers[sourceRegister] + operand;
+    }
+
+    private void ExecuteDataProcessingImmediate(uint instruction)
+    {
+        uint opcode = (instruction >> 21) & 0xF;
+
+        if (opcode == 0x4)
+        {
+            ExecuteAddImmediate(instruction);
+            return;
+        }
+
+        if (opcode == 0xD)
+        {
+            ExecuteMovImmediate(instruction);
+            return;
+        }
+
+        throw new NotSupportedException($"Unsupported data processing immediate opcode: 0x{opcode:X}");
+    }
+
     private void ExecuteBranch(uint instruction)
     {
         int offset = (int)(instruction & 0x00FFFFFF);
@@ -111,6 +170,12 @@ public sealed class Arm7tdmiCpu
         if (IsBranch(instruction))
         {
             ExecuteBranch(instruction);
+            return;
+        }
+
+        if (IsDataProcessingImmediate(instruction))
+        {
+            ExecuteDataProcessingImmediate(instruction);
             return;
         }
 
