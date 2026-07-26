@@ -182,6 +182,26 @@ public sealed class CpuInstructionTests
         Assert.Equal(0xDEADBEEFu, bus.Read32(0x03000010));
     }
 
+    [Fact]
+    public void MemoryBus_EwramMirrorsEvery256Kib()
+    {
+        MemoryBus bus = new MemoryBus([]);
+
+        bus.Write8(0x02000000, 0x12);
+
+        Assert.Equal(0x12, bus.Read8(0x02040000));
+    }
+
+    [Fact]
+    public void MemoryBus_IwramMirrorsEvery32Kib()
+    {
+        MemoryBus bus = new MemoryBus([]);
+
+        bus.Write8(0x03000000, 0x34);
+
+        Assert.Equal(0x34, bus.Read8(0x03008000));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

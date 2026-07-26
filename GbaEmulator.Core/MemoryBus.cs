@@ -3,17 +3,19 @@ namespace GbaEmulator.Core;
 public sealed class MemoryBus
 {
     private const uint EwramStart = 0x02000000;
-    private const uint EwramEnd = 0x0203FFFF;
+    private const uint EwramEnd = 0x02FFFFFF;
     private const uint IwramStart = 0x03000000;
-    private const uint IwramEnd = 0x03007FFF;
+    private const uint IwramEnd = 0x03FFFFFF;
     private const uint RomStart = 0x08000000;
     private const uint RomEnd = 0x09FFFFFF;
+    private const int EwramSize = 256 * 1024;
+    private const int IwramSize = 32 * 1024;
 
     private readonly byte[] _rom;
 
-    private readonly byte[] _ewram = new byte[256 * 1024];
+    private readonly byte[] _ewram = new byte[EwramSize];
 
-    private readonly byte[] _iwram = new byte[32 * 1024];
+    private readonly byte[] _iwram = new byte[IwramSize];
 
     public MemoryBus(byte[] rom)
     {
@@ -25,18 +27,23 @@ public sealed class MemoryBus
         return address >= start && address <= end;
     }
 
+    private static int MirrorOffset(uint address, uint start, int size)
+    {
+        return (int)((address - start) % size);
+    }
+
     public byte Read8(uint address)
     {
         if (IsInRange(address, EwramStart, EwramEnd))
         {
-            uint ewramOffset = address - EwramStart;
-            return _ewram[(int)ewramOffset];
+            int ewramOffset = MirrorOffset(address, EwramStart, EwramSize);
+            return _ewram[ewramOffset];
         }
 
         if (IsInRange(address, IwramStart, IwramEnd))
         {
-            uint iwramOffset = address - IwramStart;
-            return _iwram[(int)iwramOffset];
+            int iwramOffset = MirrorOffset(address, IwramStart, IwramSize);
+            return _iwram[iwramOffset];
         }
 
         if (IsInRange(address, RomStart, RomEnd))
@@ -70,15 +77,15 @@ public sealed class MemoryBus
     {
         if (IsInRange(address, EwramStart, EwramEnd))
         {
-            uint ewramOffset = address - EwramStart;
-            _ewram[(int)ewramOffset] = value;
+            int ewramOffset = MirrorOffset(address, EwramStart, EwramSize);
+            _ewram[ewramOffset] = value;
             return;
         }
 
         if (IsInRange(address, IwramStart, IwramEnd))
         {
-            uint iwramOffset = address - IwramStart;
-            _iwram[(int)iwramOffset] = value;
+            int iwramOffset = MirrorOffset(address, IwramStart, IwramSize);
+            _iwram[iwramOffset] = value;
             return;
         }
     }
