@@ -172,6 +172,16 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x000000FFu, cpu.GetRegister(0));
     }
 
+    [Fact]
+    public void MemoryBus_ReadsAndWritesIWRAM()
+    {
+        MemoryBus bus = new MemoryBus([]);
+
+        bus.Write32(0x03000010, 0xDEADBEEF);
+
+        Assert.Equal(0xDEADBEEFu, bus.Read32(0x03000010));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

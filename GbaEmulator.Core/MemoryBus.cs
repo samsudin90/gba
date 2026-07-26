@@ -2,26 +2,46 @@ namespace GbaEmulator.Core;
 
 public sealed class MemoryBus
 {
+    private const uint EwramStart = 0x02000000;
+    private const uint EwramEnd = 0x0203FFFF;
+    private const uint IwramStart = 0x03000000;
+    private const uint IwramEnd = 0x03007FFF;
+    private const uint RomStart = 0x08000000;
+    private const uint RomEnd = 0x09FFFFFF;
+
     private readonly byte[] _rom;
 
     private readonly byte[] _ewram = new byte[256 * 1024];
+
+    private readonly byte[] _iwram = new byte[32 * 1024];
 
     public MemoryBus(byte[] rom)
     {
         _rom = rom;
     }
 
+    private static bool IsInRange(uint address, uint start, uint end)
+    {
+        return address >= start && address <= end;
+    }
+
     public byte Read8(uint address)
     {
-        if (address >= 0x02000000 && address <= 0x0203FFFF)
+        if (IsInRange(address, EwramStart, EwramEnd))
         {
-            uint ewramOffset = address - 0x02000000;
+            uint ewramOffset = address - EwramStart;
             return _ewram[(int)ewramOffset];
         }
 
-        if (address >= 0x08000000 && address <= 0x09FFFFFF)
+        if (IsInRange(address, IwramStart, IwramEnd))
         {
-            uint romOffset = address - 0x08000000;
+            uint iwramOffset = address - IwramStart;
+            return _iwram[(int)iwramOffset];
+        }
+
+        if (IsInRange(address, RomStart, RomEnd))
+        {
+            uint romOffset = address - RomStart;
             if (romOffset < _rom.Length)
             {
                 return _rom[romOffset];
@@ -48,10 +68,17 @@ public sealed class MemoryBus
 
     public void Write8(uint address, byte value)
     {
-        if (address >= 0x02000000 && address <= 0x0203FFFF)
+        if (IsInRange(address, EwramStart, EwramEnd))
         {
-            uint ewramOffset = address - 0x02000000;
+            uint ewramOffset = address - EwramStart;
             _ewram[(int)ewramOffset] = value;
+            return;
+        }
+
+        if (IsInRange(address, IwramStart, IwramEnd))
+        {
+            uint iwramOffset = address - IwramStart;
+            _iwram[(int)iwramOffset] = value;
             return;
         }
     }
