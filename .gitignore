@@ -3,4 +3,6 @@
 /GbaEmulator.Cli/obj
 /GbaEmulator.Core/bin
 /GbaEmulator.Core/obj
+/GbaEmulator.Tests/bin
+/GbaEmulator.Tests/obj
 .DS_Store

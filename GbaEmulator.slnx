@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="GbaEmulator.Cli/GbaEmulator.Cli.csproj" />
   <Project Path="GbaEmulator.Core/GbaEmulator.Core.csproj" />
+  <Project Path="GbaEmulator.Tests/GbaEmulator.Tests.csproj" />
 </Solution>
