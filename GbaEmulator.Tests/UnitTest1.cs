@@ -98,6 +98,23 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x08000008u, cpu.Pc);
     }
 
+    [Fact]
+    public void LdrImmediate_LoadsWordFromMemory()
+    {
+        byte[] rom =
+        [
+            0x04, 0x00, 0x91, 0xE5,
+            0x78, 0x56, 0x34, 0x12
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetRegisterForTesting(1, 0x08000000);
+
+        cpu.Step();
+
+        Assert.Equal(0x12345678u, cpu.GetRegister(0));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

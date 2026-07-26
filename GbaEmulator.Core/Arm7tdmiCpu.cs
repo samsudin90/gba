@@ -35,6 +35,16 @@ public sealed class Arm7tdmiCpu
         return (instruction & 0x0E000000) == 0x0A000000;
     }
 
+    private static bool IsSingleDataTransfer(uint instruction)
+    {
+        return (instruction & 0x0C000000) == 0x04000000;
+    }
+
+    public void SetRegisterForTesting(int index, uint value)
+    {
+        _registers[index] = value;
+    }
+
     public void SetZeroFlagForTesting(bool value)
     {
         if (value)
@@ -217,6 +227,38 @@ public sealed class Arm7tdmiCpu
         throw new NotSupportedException($"Unsupported data processing immediate opcode: 0x{opcode:X}");
     }
 
+    private void ExecuteSingleDataTransfer(uint instruction)
+    {
+        bool isImmediateOffset = (instruction & (1u << 25)) == 0;
+        bool isPreIndexed = (instruction & (1u << 24)) != 0;
+        bool addOffset = (instruction & (1u << 23)) != 0;
+        bool isByteTransfer = (instruction & (1u << 22)) != 0;
+        bool writeBack = (instruction & (1u << 21)) != 0;
+        bool isLoad = (instruction & (1u << 20)) != 0;
+
+        if (!isImmediateOffset || !isPreIndexed || isByteTransfer || writeBack || !isLoad)
+        {
+            throw new NotSupportedException($"Unsupported single data transfer: 0x{instruction:X8}");
+        }
+
+        int baseRegister = (int)((instruction >> 16) & 0xF);
+        int destinationRegister = (int)((instruction >> 12) & 0xF);
+        uint offset = instruction & 0xFFF;
+
+        uint address = _registers[baseRegister];
+
+        if (addOffset)
+        {
+            address += offset;
+        }
+        else
+        {
+            address -= offset;
+        }
+
+        _registers[destinationRegister] = _bus.Read32(address);
+    }
+
     private static bool ShouldUpdateFlags(uint instruction)
     {
         return (instruction & (1u << 20)) != 0;
@@ -313,6 +355,12 @@ public sealed class Arm7tdmiCpu
         if (IsDataProcessingImmediate(instruction))
         {
             ExecuteDataProcessingImmediate(instruction);
+            return;
+        }
+
+        if (IsSingleDataTransfer(instruction))
+        {
+            ExecuteSingleDataTransfer(instruction);
             return;
         }
 
