@@ -134,6 +134,44 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x12345678u, bus.Read32(0x02000004));
     }
 
+    [Fact]
+    public void StrbImmediate_StoresLowestByteToMemory()
+    {
+        byte[] rom =
+        [
+            0x04, 0x00, 0xC1, 0xE5
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+
+        cpu.SetRegisterForTesting(0, 0x12345678);
+        cpu.SetRegisterForTesting(1, 0x02000000);
+
+        cpu.Step();
+
+        Assert.Equal(0x78, bus.Read8(0x02000004));
+    }
+
+    [Fact]
+    public void LdrbImmediate_LoadsByteAndZeroExtendsIt()
+    {
+        byte[] rom =
+        [
+            0x04, 0x00, 0xD1, 0xE5
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+
+        bus.Write8(0x02000004, 0xFF);
+        cpu.SetRegisterForTesting(1, 0x02000000);
+
+        cpu.Step();
+
+        Assert.Equal(0x000000FFu, cpu.GetRegister(0));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);
