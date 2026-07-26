@@ -175,10 +175,27 @@ public sealed class Arm7tdmiCpu
         }
     }
 
+    private void ExecuteCmpImmediate(uint instruction)
+    {
+        int sourceRegister = (int)((instruction >> 16) & 0xF);
+        uint operand = DecodeImmediateOperand(instruction);
+        uint left = _registers[sourceRegister];
+        uint result = left - operand;
+
+        SetNegativeAndZeroFlags(result);
+        SetCarryFlagForSubtraction(left, operand);
+        SetOverflowFlagForSubtraction(left, operand, result);
+    }
+
     private void ExecuteDataProcessingImmediate(uint instruction)
     {
         uint opcode = (instruction >> 21) & 0xF;
 
+        if (opcode == 0xA)
+        {
+            ExecuteCmpImmediate(instruction);
+            return;
+        }
         if (opcode == 0x2)
         {
             ExecuteSubImmediate(instruction);
