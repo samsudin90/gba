@@ -236,7 +236,7 @@ public sealed class Arm7tdmiCpu
         bool writeBack = (instruction & (1u << 21)) != 0;
         bool isLoad = (instruction & (1u << 20)) != 0;
 
-        if (!isImmediateOffset || !isPreIndexed || isByteTransfer || writeBack || !isLoad)
+        if (!isImmediateOffset || !isPreIndexed || isByteTransfer || writeBack)
         {
             throw new NotSupportedException($"Unsupported single data transfer: 0x{instruction:X8}");
         }
@@ -256,7 +256,14 @@ public sealed class Arm7tdmiCpu
             address -= offset;
         }
 
-        _registers[destinationRegister] = _bus.Read32(address);
+        if (isLoad)
+        {
+            _registers[destinationRegister] = _bus.Read32(address);
+        }
+        else
+        {
+            _bus.Write32(address, _registers[destinationRegister]);
+        }
     }
 
     private static bool ShouldUpdateFlags(uint instruction)

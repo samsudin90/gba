@@ -115,6 +115,25 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x12345678u, cpu.GetRegister(0));
     }
 
+    [Fact]
+    public void StrImmediate_StoresWordToMemory()
+    {
+        byte[] rom =
+        [
+            0x04, 0x00, 0x81, 0xE5
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+
+        cpu.SetRegisterForTesting(0, 0x12345678);
+        cpu.SetRegisterForTesting(1, 0x02000000);
+
+        cpu.Step();
+
+        Assert.Equal(0x12345678u, bus.Read32(0x02000004));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);
