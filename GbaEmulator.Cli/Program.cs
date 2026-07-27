@@ -89,6 +89,13 @@ static void RunStepCommand(byte[] romBytes, int stepCount)
 
     Console.WriteLine($"Final PC: 0x{cpu.Pc:X8}");
     Console.WriteLine($"Final CPSR: 0x{cpu.Cpsr:X8}");
+    Console.WriteLine(
+        $"R0=0x{cpu.GetRegister(0):X8}, R1=0x{cpu.GetRegister(1):X8}, " +
+        $"R2=0x{cpu.GetRegister(2):X8}, R3=0x{cpu.GetRegister(3):X8}");
+    Console.WriteLine(
+        $"R4=0x{cpu.GetRegister(4):X8}, R5=0x{cpu.GetRegister(5):X8}, " +
+        $"R6=0x{cpu.GetRegister(6):X8}, R7=0x{cpu.GetRegister(7):X8}");
+    Console.WriteLine($"SP=0x{cpu.GetRegister(13):X8}, LR=0x{cpu.GetRegister(14):X8}");
 
     Console.WriteLine("Hot PC instructions:");
 

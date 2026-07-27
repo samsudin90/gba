@@ -177,6 +177,26 @@ public sealed class Arm7tdmiCpu
         return (instruction & 0xF800) == 0x6000;
     }
 
+    private static bool IsThumbLoadWordImmediate(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x6800;
+    }
+
+    private static bool IsThumbStoreMultipleIncrementAfter(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0xC000;
+    }
+
+    private static bool IsThumbLoadAddressFromStackPointer(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0xA800;
+    }
+
+    private static bool IsThumbLoadSignedHalfwordRegisterOffset(ushort instruction)
+    {
+        return (instruction & 0xFE00) == 0x5E00;
+    }
+
     private void SaveBankedRegisters()
     {
         switch (CurrentMode)
@@ -861,9 +881,78 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (opcode == 0x1)
+        {
+            uint result = _registers[destinationRegister] ^ _registers[sourceRegister];
+
+            _registers[destinationRegister] = result;
+            SetNegativeAndZeroFlags(result);
+            return;
+        }
+
         if (opcode == 0xC)
         {
             uint result = _registers[destinationRegister] | _registers[sourceRegister];
+
+            _registers[destinationRegister] = result;
+            SetNegativeAndZeroFlags(result);
+            return;
+        }
+
+        if (opcode == 0xA)
+        {
+            uint left = _registers[destinationRegister];
+            uint right = _registers[sourceRegister];
+            uint result = left - right;
+
+            SetNegativeAndZeroFlags(result);
+            SetCarryFlagForSubtraction(left, right);
+            SetOverflowFlagForSubtraction(left, right, result);
+            return;
+        }
+
+        if (opcode == 0x9)
+        {
+            uint left = 0;
+            uint right = _registers[sourceRegister];
+            uint result = left - right;
+
+            _registers[destinationRegister] = result;
+            SetNegativeAndZeroFlags(result);
+            SetCarryFlagForSubtraction(left, right);
+            SetOverflowFlagForSubtraction(left, right, result);
+            return;
+        }
+
+        if (opcode == 0x8)
+        {
+            uint result = _registers[destinationRegister] & _registers[sourceRegister];
+
+            SetNegativeAndZeroFlags(result);
+            return;
+        }
+
+        if (opcode == 0xD)
+        {
+            uint result = unchecked(_registers[destinationRegister] * _registers[sourceRegister]);
+
+            _registers[destinationRegister] = result;
+            SetNegativeAndZeroFlags(result);
+            return;
+        }
+
+        if (opcode == 0xE)
+        {
+            uint result = _registers[destinationRegister] & ~_registers[sourceRegister];
+
+            _registers[destinationRegister] = result;
+            SetNegativeAndZeroFlags(result);
+            return;
+        }
+
+        if (opcode == 0xF)
+        {
+            uint result = ~_registers[sourceRegister];
 
             _registers[destinationRegister] = result;
             SetNegativeAndZeroFlags(result);
@@ -934,6 +1023,23 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (comment == 0x0B)
+        {
+            ExecuteCpuSet();
+            return;
+        }
+
+        if (comment == 0x06)
+        {
+            ExecuteDiv();
+            return;
+        }
+
+        if (comment == 0x05)
+        {
+            return;
+        }
+
         throw new NotSupportedException($"Unsupported BIOS SWI: 0x{comment:X2}");
     }
 
@@ -950,6 +1056,72 @@ public sealed class Arm7tdmiCpu
         {
             _bus.ClearIwram();
         }
+    }
+
+    private void ExecuteCpuSet()
+    {
+        uint source = _registers[0];
+        uint destination = _registers[1];
+        uint mode = _registers[2];
+        int count = (int)(mode & 0x001FFFFF);
+        bool copy32Bit = (mode & (1u << 24)) != 0;
+        bool fixedSource = (mode & (1u << 26)) != 0;
+
+        if (copy32Bit)
+        {
+            uint fixedValue = fixedSource ? _bus.Read32(source) : 0;
+
+            for (int i = 0; i < count; i++)
+            {
+                uint value = fixedSource ? fixedValue : _bus.Read32(source);
+                _bus.Write32(destination, value);
+
+                if (!fixedSource)
+                {
+                    source += 4;
+                }
+
+                destination += 4;
+            }
+        }
+        else
+        {
+            ushort fixedValue = fixedSource ? _bus.Read16(source) : (ushort)0;
+
+            for (int i = 0; i < count; i++)
+            {
+                ushort value = fixedSource ? fixedValue : _bus.Read16(source);
+                _bus.Write16(destination, value);
+
+                if (!fixedSource)
+                {
+                    source += 2;
+                }
+
+                destination += 2;
+            }
+        }
+    }
+
+    private void ExecuteDiv()
+    {
+        int numerator = unchecked((int)_registers[0]);
+        int denominator = unchecked((int)_registers[1]);
+
+        if (denominator == 0)
+        {
+            _registers[0] = 0;
+            _registers[1] = (uint)numerator;
+            _registers[3] = 0;
+            return;
+        }
+
+        int quotient = numerator / denominator;
+        int remainder = numerator % denominator;
+
+        _registers[0] = unchecked((uint)quotient);
+        _registers[1] = unchecked((uint)remainder);
+        _registers[3] = quotient == int.MinValue ? 0x80000000u : (uint)Math.Abs(quotient);
     }
 
     private void ExecuteThumbBranchExchange(ushort instruction)
@@ -979,6 +1151,18 @@ public sealed class Arm7tdmiCpu
         if (opcode == 0x0)
         {
             ExecuteThumbLslImmediate(destinationRegister, sourceRegister, offset);
+            return;
+        }
+
+        if (opcode == 0x1)
+        {
+            ExecuteThumbLsrImmediate(destinationRegister, sourceRegister, offset);
+            return;
+        }
+
+        if (opcode == 0x2)
+        {
+            ExecuteThumbAsrImmediate(destinationRegister, sourceRegister, offset);
             return;
         }
 
@@ -1156,6 +1340,55 @@ public sealed class Arm7tdmiCpu
         _bus.Write32(address, _registers[sourceRegister]);
     }
 
+    private void ExecuteThumbLoadWordImmediate(ushort instruction)
+    {
+        int immediate5 = (instruction >> 6) & 0x1F;
+        int baseRegister = (instruction >> 3) & 0x7;
+        int destinationRegister = instruction & 0x7;
+
+        uint offset = (uint)immediate5 * 4;
+        uint address = _registers[baseRegister] + offset;
+
+        _registers[destinationRegister] = _bus.Read32(address);
+    }
+
+    private void ExecuteThumbStoreMultipleIncrementAfter(ushort instruction)
+    {
+        int baseRegister = (instruction >> 8) & 0x7;
+        byte registerList = (byte)(instruction & 0xFF);
+        uint address = _registers[baseRegister];
+
+        for (int register = 0; register <= 7; register++)
+        {
+            if ((registerList & (1 << register)) != 0)
+            {
+                _bus.Write32(address, _registers[register]);
+                address += 4;
+            }
+        }
+
+        _registers[baseRegister] = address;
+    }
+
+    private void ExecuteThumbLoadAddressFromStackPointer(ushort instruction)
+    {
+        int destinationRegister = (instruction >> 8) & 0x7;
+        uint offset = (uint)(instruction & 0xFF) * 4;
+
+        _registers[destinationRegister] = _registers[13] + offset;
+    }
+
+    private void ExecuteThumbLoadSignedHalfwordRegisterOffset(ushort instruction)
+    {
+        int offsetRegister = (instruction >> 6) & 0x7;
+        int baseRegister = (instruction >> 3) & 0x7;
+        int destinationRegister = instruction & 0x7;
+        uint address = _registers[baseRegister] + _registers[offsetRegister];
+        short value = unchecked((short)_bus.Read16(address));
+
+        _registers[destinationRegister] = unchecked((uint)value);
+    }
+
     private void ExecuteThumbSubImmediateFromRegister(ushort instruction)
     {
         int destinationRegister = (instruction >> 8) & 0x7;
@@ -1168,6 +1401,66 @@ public sealed class Arm7tdmiCpu
         SetNegativeAndZeroFlags(result);
         SetCarryFlagForSubtraction(left, immediate);
         SetOverflowFlagForSubtraction(left, immediate, result);
+    }
+
+    private void ExecuteThumbLsrImmediate(int destinationRegister, int sourceRegister, int offset)
+    {
+        uint value = _registers[sourceRegister];
+        uint result;
+        uint carryOut;
+
+        if (offset == 0)
+        {
+            carryOut = (value >> 31) & 1u;
+            result = 0;
+        }
+        else
+        {
+            carryOut = (value >> (offset - 1)) & 1u;
+            result = value >> offset;
+        }
+
+        if (carryOut != 0)
+        {
+            Cpsr |= CarryFlag;
+        }
+        else
+        {
+            Cpsr &= ~CarryFlag;
+        }
+
+        _registers[destinationRegister] = result;
+        SetNegativeAndZeroFlags(result);
+    }
+
+    private void ExecuteThumbAsrImmediate(int destinationRegister, int sourceRegister, int offset)
+    {
+        uint value = _registers[sourceRegister];
+        uint result;
+        uint carryOut;
+
+        if (offset == 0)
+        {
+            carryOut = (value >> 31) & 1u;
+            result = carryOut != 0 ? 0xFFFFFFFFu : 0;
+        }
+        else
+        {
+            carryOut = (value >> (offset - 1)) & 1u;
+            result = unchecked((uint)((int)value >> offset));
+        }
+
+        if (carryOut != 0)
+        {
+            Cpsr |= CarryFlag;
+        }
+        else
+        {
+            Cpsr &= ~CarryFlag;
+        }
+
+        _registers[destinationRegister] = result;
+        SetNegativeAndZeroFlags(result);
     }
 
     private static bool ShouldUpdateFlags(uint instruction)
@@ -1306,12 +1599,6 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
-        if (IsThumbBranchExchange(instruction))
-        {
-            ExecuteThumbBranchExchange(instruction);
-            return;
-        }
-
         if (IsThumbAluOperation(instruction))
         {
             ExecuteThumbAluOperation(instruction);
@@ -1396,9 +1683,39 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (IsThumbBranchExchange(instruction))
+        {
+            ExecuteThumbBranchExchange(instruction);
+            return;
+        }
+
         if (IsThumbStoreWordImmediate(instruction))
         {
             ExecuteThumbStoreWordImmediate(instruction);
+            return;
+        }
+
+        if (IsThumbLoadWordImmediate(instruction))
+        {
+            ExecuteThumbLoadWordImmediate(instruction);
+            return;
+        }
+
+        if (IsThumbStoreMultipleIncrementAfter(instruction))
+        {
+            ExecuteThumbStoreMultipleIncrementAfter(instruction);
+            return;
+        }
+
+        if (IsThumbLoadAddressFromStackPointer(instruction))
+        {
+            ExecuteThumbLoadAddressFromStackPointer(instruction);
+            return;
+        }
+
+        if (IsThumbLoadSignedHalfwordRegisterOffset(instruction))
+        {
+            ExecuteThumbLoadSignedHalfwordRegisterOffset(instruction);
             return;
         }
 

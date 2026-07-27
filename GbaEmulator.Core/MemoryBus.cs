@@ -14,7 +14,9 @@ public sealed class MemoryBus
     private ushort _keyInput = 0x03FF;
     private const uint IoStart = 0x04000000;
     private const uint IoEnd = 0x040003FE;
+    private const uint VCount = 0x04000006;
     private const uint KeyInput = 0x04000130;
+    private byte _vcount;
 
     private const uint BiosStart = 0x00000000;
     private const uint BiosEnd = 0x00003FFF;
@@ -90,6 +92,18 @@ public sealed class MemoryBus
 
         if (IsInRange(address, IoStart, IoEnd))
         {
+            if (address == VCount)
+            {
+                byte value = _vcount;
+                _vcount = (byte)((_vcount + 1) % 228);
+                return value;
+            }
+
+            if (address == VCount + 1)
+            {
+                return 0x00;
+            }
+
             if (address == KeyInput)
             {
                 return (byte)(_keyInput & 0xFF);
@@ -108,7 +122,7 @@ public sealed class MemoryBus
             uint romOffset = address - RomStart;
             if (romOffset < _rom.Length)
             {
-                return _rom[romOffset];
+                return _rom[(int)romOffset];
             }
             return 0xFF;
         }
