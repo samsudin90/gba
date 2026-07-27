@@ -434,6 +434,23 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x11u, cpu.GetRegister(13));
     }
 
+    [Fact]
+    public void LdrImmediate_WhenBaseIsPcUsesCurrentInstructionAddressPlus8()
+    {
+        byte[] rom =
+        [
+            0x00, 0x00, 0x9F, 0xE5,
+            0x00, 0x00, 0x00, 0x00,
+            0x78, 0x56, 0x34, 0x12
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+
+        Assert.Equal(0x12345678u, cpu.GetRegister(0));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

@@ -116,6 +116,16 @@ public sealed class Arm7tdmiCpu
         Cpsr = value;
     }
 
+    private uint GetAddressRegisterValue(int register)
+    {
+        if (register == 15)
+        {
+            return Pc + 4;
+        }
+
+        return _registers[register];
+    }
+
     private uint GetOperandRegisterValue(int register)
     {
         if (register == 15)
@@ -361,7 +371,7 @@ public sealed class Arm7tdmiCpu
         int baseRegister = (int)((instruction >> 16) & 0xF);
         int dataRegister = (int)((instruction >> 12) & 0xF);
 
-        uint address = _registers[baseRegister];
+        uint address = GetAddressRegisterValue(baseRegister);
 
         if (isLoad)
         {
@@ -391,7 +401,7 @@ public sealed class Arm7tdmiCpu
         int destinationRegister = (int)((instruction >> 12) & 0xF);
         uint offset = instruction & 0xFFF;
 
-        uint address = _registers[baseRegister];
+        uint address = GetAddressRegisterValue(baseRegister);
 
         if (addOffset)
         {
