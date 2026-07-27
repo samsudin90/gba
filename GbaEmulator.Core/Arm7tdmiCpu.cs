@@ -379,6 +379,12 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (opcode == 0x9)
+        {
+            ExecuteTeqRegister(instruction);
+            return;
+        }
+
         throw new NotSupportedException($"Unsupported data processing register opcode: 0x{opcode:X}");
     }
 
@@ -395,6 +401,18 @@ public sealed class Arm7tdmiCpu
         {
             SetNegativeAndZeroFlags(operand);
         }
+    }
+
+    private void ExecuteTeqRegister(uint instruction)
+    {
+        int sourceRegister = (int)((instruction >> 16) & 0xF);
+        int operandRegister = (int)(instruction & 0xF);
+
+        uint left = GetOperandRegisterValue(sourceRegister);
+        uint right = GetOperandRegisterValue(operandRegister);
+        uint result = left ^ right;
+
+        SetNegativeAndZeroFlags(result);
     }
 
     private static bool ShouldUpdateFlags(uint instruction)

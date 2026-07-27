@@ -330,6 +330,44 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x08000008u, cpu.GetRegister(14));
     }
 
+    [Fact]
+    public void TeqRegister_SetsZeroFlagWhenOperandsAreEqual()
+    {
+        byte[] rom =
+        [
+            0x05, 0x00, 0xA0, 0xE3,
+            0x05, 0x10, 0xA0, 0xE3,
+            0x01, 0x00, 0x30, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+        cpu.Step();
+        cpu.Step();
+
+        Assert.True(cpu.ZeroFlagSet);
+    }
+
+    [Fact]
+    public void TeqRegister_ClearsZeroFlagWhenOperandsDiffer()
+    {
+        byte[] rom =
+        [
+            0x05, 0x00, 0xA0, 0xE3,
+            0x07, 0x10, 0xA0, 0xE3,
+            0x01, 0x00, 0x30, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+        cpu.Step();
+        cpu.Step();
+
+        Assert.False(cpu.ZeroFlagSet);
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);
