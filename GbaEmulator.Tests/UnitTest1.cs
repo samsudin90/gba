@@ -202,6 +202,25 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x34, bus.Read8(0x03008000));
     }
 
+    [Fact]
+    public void KeyInput_DefaultsToNoButtonsPressed()
+    {
+        MemoryBus bus = new MemoryBus([]);
+
+        Assert.Equal(0x03FFu, bus.Read16(0x04000130));
+    }
+
+    [Fact]
+    public void KeyInput_ReleasedButtonSetsBit()
+    {
+        MemoryBus bus = new MemoryBus([]);
+
+        bus.SetButtonState(GbaButton.A, pressed: true);
+        bus.SetButtonState(GbaButton.A, pressed: false);
+
+        Assert.Equal(0x03FFu, bus.Read16(0x04000130));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

@@ -11,6 +11,11 @@ public sealed class MemoryBus
     private const int EwramSize = 256 * 1024;
     private const int IwramSize = 32 * 1024;
 
+    private ushort _keyInput = 0x03FF;
+    private const uint IoStart = 0x04000000;
+    private const uint IoEnd = 0x040003FE;
+    private const uint KeyInput = 0x04000130;
+
     private readonly byte[] _rom;
 
     private readonly byte[] _ewram = new byte[EwramSize];
@@ -32,6 +37,20 @@ public sealed class MemoryBus
         return (int)((address - start) % size);
     }
 
+    public void SetButtonState(GbaButton button, bool pressed)
+    {
+        ushort mask = (ushort)button;
+
+        if (pressed)
+        {
+            _keyInput &= (ushort)~mask;
+        }
+        else
+        {
+            _keyInput |= mask;
+        }
+    }
+
     public byte Read8(uint address)
     {
         if (IsInRange(address, EwramStart, EwramEnd))
@@ -44,6 +63,21 @@ public sealed class MemoryBus
         {
             int iwramOffset = MirrorOffset(address, IwramStart, IwramSize);
             return _iwram[iwramOffset];
+        }
+
+        if (IsInRange(address, IoStart, IoEnd))
+        {
+            if (address == KeyInput)
+            {
+                return (byte)(_keyInput & 0xFF);
+            }
+
+            if (address == KeyInput + 1)
+            {
+                return (byte)(_keyInput >> 8);
+            }
+
+            return 0x00;
         }
 
         if (IsInRange(address, RomStart, RomEnd))
