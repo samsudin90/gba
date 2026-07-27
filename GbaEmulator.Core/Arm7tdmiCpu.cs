@@ -1024,7 +1024,7 @@ public sealed class Arm7tdmiCpu
 
         offset <<= 1;
 
-        Pc = (uint)((int)Pc + offset);
+        Pc = (uint)((int)Pc + 2 + offset);
     }
 
     private void ExecuteThumbUnconditionalBranch(ushort instruction)
@@ -1038,7 +1038,7 @@ public sealed class Arm7tdmiCpu
 
         offset <<= 1;
 
-        Pc = (uint)((int)Pc + offset);
+        Pc = (uint)((int)Pc + 2 + offset);
     }
 
     private void ExecuteThumbLoadByteImmediate(ushort instruction)
@@ -1172,15 +1172,15 @@ public sealed class Arm7tdmiCpu
     {
         ushort instruction = Fetch16();
 
-        if (IsThumbPush(instruction))
-        {
-            ExecuteThumbPush(instruction);
-            return;
-        }
-
         if (IsThumbBlPrefix(instruction))
         {
             ExecuteThumbBl(instruction);
+            return;
+        }
+        
+        if (IsThumbPush(instruction))
+        {
+            ExecuteThumbPush(instruction);
             return;
         }
 
@@ -1288,7 +1288,13 @@ public sealed class Arm7tdmiCpu
 
 
 
-        throw new NotSupportedException($"Unsupported Thumb instruction: 0x{instruction:X4}");
+        ushort previous = _bus.Read16(Pc - 4);
+        ushort current = _bus.Read16(Pc - 2);
+        ushort next = _bus.Read16(Pc);
+
+        throw new NotSupportedException(
+            $"Unsupported Thumb instruction: 0x{instruction:X4} at PC=0x{Pc - 2:X8}, " +
+            $"prev=0x{previous:X4}, current=0x{current:X4}, next=0x{next:X4}");
     }
 
     private void StepArm()

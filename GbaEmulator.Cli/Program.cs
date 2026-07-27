@@ -52,18 +52,50 @@ static void RunStepCommand(byte[] romBytes, int stepCount)
     MemoryBus bus = new MemoryBus(romBytes);
     Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
 
+    // for (int i = 0; i < stepCount; i++)
+    // {
+    //     Console.WriteLine($"Before step {i}: PC=0x{cpu.Pc:X8}");
+    //     cpu.Step();
+    //     Console.WriteLine($"After step {i}:  PC=0x{cpu.Pc:X8}");
+    //     uint instruction = bus.Read32(cpu.Pc);
+
+    //     Console.WriteLine(
+    //         $"Before step {i}: PC=0x{cpu.Pc:X8}, Instruction=0x{instruction:X8}, " +
+    //         $"R0=0x{cpu.GetRegister(0):X8}, R1=0x{cpu.GetRegister(1):X8}, " +
+    //         $"SP=0x{cpu.GetRegister(13):X8}, LR=0x{cpu.GetRegister(14):X8}, " +
+    //         $"CPSR=0x{cpu.Cpsr:X8}");
+    // }
+
+    Dictionary<uint, int> pcHits = new();
+
     for (int i = 0; i < stepCount; i++)
     {
-        Console.WriteLine($"Before step {i}: PC=0x{cpu.Pc:X8}");
-        cpu.Step();
-        Console.WriteLine($"After step {i}:  PC=0x{cpu.Pc:X8}");
-        uint instruction = bus.Read32(cpu.Pc);
+        uint pc = cpu.Pc;
 
-        Console.WriteLine(
-            $"Before step {i}: PC=0x{cpu.Pc:X8}, Instruction=0x{instruction:X8}, " +
-            $"R0=0x{cpu.GetRegister(0):X8}, R1=0x{cpu.GetRegister(1):X8}, " +
-            $"SP=0x{cpu.GetRegister(13):X8}, LR=0x{cpu.GetRegister(14):X8}, " +
-            $"CPSR=0x{cpu.Cpsr:X8}");
+        if (!pcHits.TryAdd(pc, 1))
+        {
+            pcHits[pc]++;
+        }
+
+        cpu.Step();
+    }
+
+    Console.WriteLine("Top PC hits:");
+
+    foreach (var item in pcHits.OrderByDescending(x => x.Value).Take(10))
+    {
+        Console.WriteLine($"PC=0x{item.Key:X8}, Hits={item.Value}");
+    }
+
+    Console.WriteLine($"Final PC: 0x{cpu.Pc:X8}");
+    Console.WriteLine($"Final CPSR: 0x{cpu.Cpsr:X8}");
+
+    Console.WriteLine("Hot PC instructions:");
+
+    foreach (var item in pcHits.OrderByDescending(x => x.Value).Take(10).OrderBy(x => x.Key))
+    {
+        ushort thumbInstruction = bus.Read16(item.Key);
+        Console.WriteLine($"PC=0x{item.Key:X8}, Thumb=0x{thumbInstruction:X4}, Hits={item.Value}");
     }
 }
 
