@@ -474,6 +474,12 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (opcode == 0x8)
+        {
+            ExecuteTstRegister(instruction);
+            return;
+        }
+
         if (opcode == 0x9)
         {
             ExecuteTeqRegister(instruction);
@@ -506,6 +512,18 @@ public sealed class Arm7tdmiCpu
         uint left = GetOperandRegisterValue(sourceRegister);
         uint right = GetOperandRegisterValue(operandRegister);
         uint result = left ^ right;
+
+        SetNegativeAndZeroFlags(result);
+    }
+
+    private void ExecuteTstRegister(uint instruction)
+    {
+        int sourceRegister = (int)((instruction >> 16) & 0xF);
+        int operandRegister = (int)(instruction & 0xF);
+
+        uint left = GetOperandRegisterValue(sourceRegister);
+        uint right = GetOperandRegisterValue(operandRegister);
+        uint result = left & right;
 
         SetNegativeAndZeroFlags(result);
     }

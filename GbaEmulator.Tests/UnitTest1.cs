@@ -451,6 +451,44 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x12345678u, cpu.GetRegister(0));
     }
 
+    [Fact]
+    public void TstRegister_SetsZeroFlagWhenNoBitsOverlap()
+    {
+        byte[] rom =
+        [
+            0x01, 0x00, 0xA0, 0xE3,
+            0x02, 0x10, 0xA0, 0xE3,
+            0x01, 0x00, 0x10, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+        cpu.Step();
+        cpu.Step();
+
+        Assert.True(cpu.ZeroFlagSet);
+    }
+
+    [Fact]
+    public void TstRegister_ClearsZeroFlagWhenBitsOverlap()
+    {
+        byte[] rom =
+        [
+            0x03, 0x00, 0xA0, 0xE3,
+            0x02, 0x10, 0xA0, 0xE3,
+            0x01, 0x00, 0x10, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+        cpu.Step();
+        cpu.Step();
+
+        Assert.False(cpu.ZeroFlagSet);
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);
