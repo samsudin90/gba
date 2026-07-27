@@ -11,11 +11,13 @@ public sealed class Arm7tdmiCpu
     private const uint ZeroFlag = 1u << 30;
     private const uint CarryFlag = 1u << 29;
     private const uint OverflowFlag = 1u << 28;
+    private const uint ThumbStateFlag = 1u << 5;
 
     public bool NegativeFlagSet => (Cpsr & NegativeFlag) != 0;
     public bool ZeroFlagSet => (Cpsr & ZeroFlag) != 0;
     public bool CarryFlagSet => (Cpsr & CarryFlag) != 0;
     public bool OverflowFlagSet => (Cpsr & OverflowFlag) != 0;
+    public bool ThumbState => (Cpsr & ThumbStateFlag) != 0;
 
     public uint Pc
     {
@@ -47,6 +49,11 @@ public sealed class Arm7tdmiCpu
         }
 
         return _registers[register];
+    }
+
+    private static bool IsBranchExchange(uint instruction)
+    {
+        return (instruction & 0x0FFFFFF0) == 0x012FFF10;
     }
 
     private static bool IsPsrTransfer(uint instruction)
@@ -415,6 +422,23 @@ public sealed class Arm7tdmiCpu
         SetNegativeAndZeroFlags(result);
     }
 
+    private void ExecuteBranchExchange(uint instruction)
+    {
+        int sourceRegister = (int)(instruction & 0xF);
+        uint target = GetOperandRegisterValue(sourceRegister);
+
+        if ((target & 1) != 0)
+        {
+            Cpsr |= ThumbStateFlag;
+        }
+        else
+        {
+            Cpsr &= ~ThumbStateFlag;
+        }
+
+        Pc = target & 0xFFFFFFFE;
+    }
+
     private static bool ShouldUpdateFlags(uint instruction)
     {
         return (instruction & (1u << 20)) != 0;
@@ -529,6 +553,12 @@ public sealed class Arm7tdmiCpu
         if (IsSingleDataTransfer(instruction))
         {
             ExecuteSingleDataTransfer(instruction);
+            return;
+        }
+
+        if (IsBranchExchange(instruction))
+        {
+            ExecuteBranchExchange(instruction);
             return;
         }
 

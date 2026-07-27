@@ -368,6 +368,40 @@ public sealed class CpuInstructionTests
         Assert.False(cpu.ZeroFlagSet);
     }
 
+    [Fact]
+    public void Bx_BranchesToRegisterValue()
+    {
+        byte[] rom =
+        [
+            0x11, 0xFF, 0x2F, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetRegisterForTesting(1, 0x03005D90);
+
+        cpu.Step();
+
+        Assert.Equal(0x03005D90u, cpu.Pc);
+        Assert.False(cpu.ThumbState);
+    }
+
+    [Fact]
+    public void Bx_SwitchesToThumbWhenTargetBitZeroIsSet()
+    {
+        byte[] rom =
+        [
+            0x11, 0xFF, 0x2F, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetRegisterForTesting(1, 0x03005D91);
+
+        cpu.Step();
+
+        Assert.Equal(0x03005D90u, cpu.Pc);
+        Assert.True(cpu.ThumbState);
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

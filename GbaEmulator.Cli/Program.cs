@@ -57,6 +57,13 @@ static void RunStepCommand(byte[] romBytes, int stepCount)
         Console.WriteLine($"Before step {i}: PC=0x{cpu.Pc:X8}");
         cpu.Step();
         Console.WriteLine($"After step {i}:  PC=0x{cpu.Pc:X8}");
+        uint instruction = bus.Read32(cpu.Pc);
+
+        Console.WriteLine(
+            $"Before step {i}: PC=0x{cpu.Pc:X8}, Instruction=0x{instruction:X8}, " +
+            $"R0=0x{cpu.GetRegister(0):X8}, R1=0x{cpu.GetRegister(1):X8}, " +
+            $"SP=0x{cpu.GetRegister(13):X8}, LR=0x{cpu.GetRegister(14):X8}, " +
+            $"CPSR=0x{cpu.Cpsr:X8}");
     }
 }
 
