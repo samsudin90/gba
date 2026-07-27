@@ -6,3 +6,4 @@
 /GbaEmulator.Tests/bin
 /GbaEmulator.Tests/obj
 .DS_Store
+/bios
