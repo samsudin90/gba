@@ -31,6 +31,8 @@ public sealed class Arm7tdmiCpu
     private uint _irqR14;
     private uint _supervisorR13;
     private uint _supervisorR14;
+    private uint _irqSpsr;
+    private uint _supervisorSpsr;
 
     public uint Pc
     {
@@ -197,6 +199,11 @@ public sealed class Arm7tdmiCpu
         return (instruction & 0xFE00) == 0x5E00;
     }
 
+    private static bool IsThumbStoreWordRegisterOffset(ushort instruction)
+    {
+        return (instruction & 0xFE00) == 0x5000;
+    }
+
     private void SaveBankedRegisters()
     {
         switch (CurrentMode)
@@ -255,6 +262,30 @@ public sealed class Arm7tdmiCpu
         }
 
         Cpsr = value;
+    }
+
+    private uint GetCurrentSpsr()
+    {
+        return CurrentMode switch
+        {
+            IrqMode => _irqSpsr,
+            SupervisorMode => _supervisorSpsr,
+            _ => 0
+        };
+    }
+
+    private void SetCurrentSpsr(uint value)
+    {
+        switch (CurrentMode)
+        {
+            case IrqMode:
+                _irqSpsr = value;
+                break;
+
+            case SupervisorMode:
+                _supervisorSpsr = value;
+                break;
+        }
     }
 
     private uint GetAddressRegisterValue(int register)
@@ -325,6 +356,11 @@ public sealed class Arm7tdmiCpu
     private static bool IsSingleDataTransfer(uint instruction)
     {
         return (instruction & 0x0C000000) == 0x04000000;
+    }
+
+    private static bool IsBlockDataTransfer(uint instruction)
+    {
+        return (instruction & 0x0E000000) == 0x08000000;
     }
 
     public void SetRegisterForTesting(int index, uint value)
@@ -441,7 +477,7 @@ public sealed class Arm7tdmiCpu
         int sourceRegister = (int)((instruction >> 16) & 0xF);
         int destinationRegister = (int)((instruction >> 12) & 0xF);
         uint operand = DecodeImmediateOperand(instruction);
-        uint left = _registers[sourceRegister];
+        uint left = GetOperandRegisterValue(sourceRegister);
         uint result = left + operand;
 
         _registers[destinationRegister] = result;
@@ -459,7 +495,7 @@ public sealed class Arm7tdmiCpu
         int sourceRegister = (int)((instruction >> 16) & 0xF);
         int destinationRegister = (int)((instruction >> 12) & 0xF);
         uint operand = DecodeImmediateOperand(instruction);
-        uint left = _registers[sourceRegister];
+        uint left = GetOperandRegisterValue(sourceRegister);
         uint result = left - operand;
 
         _registers[destinationRegister] = result;
@@ -476,12 +512,30 @@ public sealed class Arm7tdmiCpu
     {
         int sourceRegister = (int)((instruction >> 16) & 0xF);
         uint operand = DecodeImmediateOperand(instruction);
-        uint left = _registers[sourceRegister];
+        uint left = GetOperandRegisterValue(sourceRegister);
         uint result = left - operand;
 
         SetNegativeAndZeroFlags(result);
         SetCarryFlagForSubtraction(left, operand);
         SetOverflowFlagForSubtraction(left, operand, result);
+    }
+
+    private void ExecuteTstImmediate(uint instruction)
+    {
+        int sourceRegister = (int)((instruction >> 16) & 0xF);
+        uint operand = DecodeImmediateOperand(instruction);
+        uint result = GetOperandRegisterValue(sourceRegister) & operand;
+
+        SetNegativeAndZeroFlags(result);
+    }
+
+    private void ExecuteTeqImmediate(uint instruction)
+    {
+        int sourceRegister = (int)((instruction >> 16) & 0xF);
+        uint operand = DecodeImmediateOperand(instruction);
+        uint result = GetOperandRegisterValue(sourceRegister) ^ operand;
+
+        SetNegativeAndZeroFlags(result);
     }
 
     private void ExecuteDataProcessingImmediate(uint instruction)
@@ -493,6 +547,19 @@ public sealed class Arm7tdmiCpu
             ExecuteCmpImmediate(instruction);
             return;
         }
+
+        if (opcode == 0x8)
+        {
+            ExecuteTstImmediate(instruction);
+            return;
+        }
+
+        if (opcode == 0x9)
+        {
+            ExecuteTeqImmediate(instruction);
+            return;
+        }
+
         if (opcode == 0x2)
         {
             ExecuteSubImmediate(instruction);
@@ -511,7 +578,7 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
-        throw new NotSupportedException($"Unsupported data processing immediate opcode: 0x{opcode:X}");
+        throw new NotSupportedException($"Unsupported data processing immediate opcode: 0x{opcode:X} in instruction 0x{instruction:X8}");
     }
 
     private void ExecuteHalfwordDataTransfer(uint instruction)
@@ -596,13 +663,72 @@ public sealed class Arm7tdmiCpu
             }
         }
     }
+
+    private void ExecuteBlockDataTransfer(uint instruction)
+    {
+        bool preIndex = (instruction & (1u << 24)) != 0;
+        bool addOffset = (instruction & (1u << 23)) != 0;
+        bool psrAndForceUser = (instruction & (1u << 22)) != 0;
+        bool writeBack = (instruction & (1u << 21)) != 0;
+        bool isLoad = (instruction & (1u << 20)) != 0;
+
+        if (psrAndForceUser)
+        {
+            throw new NotSupportedException($"Unsupported block data transfer with S bit: 0x{instruction:X8}");
+        }
+
+        int baseRegister = (int)((instruction >> 16) & 0xF);
+        ushort registerList = (ushort)(instruction & 0xFFFF);
+        int registerCount = CountBits((byte)(registerList & 0xFF)) + CountBits((byte)(registerList >> 8));
+        uint baseAddress = _registers[baseRegister];
+        uint address;
+        uint finalBase;
+
+        if (addOffset)
+        {
+            address = preIndex ? baseAddress + 4 : baseAddress;
+            finalBase = baseAddress + (uint)(registerCount * 4);
+        }
+        else
+        {
+            address = preIndex
+                ? baseAddress - (uint)(registerCount * 4)
+                : baseAddress - (uint)((registerCount - 1) * 4);
+            finalBase = baseAddress - (uint)(registerCount * 4);
+        }
+
+        for (int register = 0; register <= 15; register++)
+        {
+            if ((registerList & (1 << register)) == 0)
+            {
+                continue;
+            }
+
+            if (isLoad)
+            {
+                _registers[register] = _bus.Read32(address);
+            }
+            else
+            {
+                uint value = register == 15 ? Pc + 4 : _registers[register];
+                _bus.Write32(address, value);
+            }
+
+            address += 4;
+        }
+
+        if (writeBack)
+        {
+            _registers[baseRegister] = finalBase;
+        }
+    }
     
     private void ExecutePsrTransfer(uint instruction)
     {
         bool isImmediateOperand = (instruction & (1u << 25)) != 0;
         bool useSpsr = (instruction & (1u << 22)) != 0;
 
-        if (isImmediateOperand || useSpsr)
+        if (isImmediateOperand)
         {
             throw new NotSupportedException($"Unsupported PSR transfer: 0x{instruction:X8}");
         }
@@ -610,19 +736,25 @@ public sealed class Arm7tdmiCpu
         int sourceRegister = (int)(instruction & 0xF);
         uint fieldMask = (instruction >> 16) & 0xF;
         uint value = _registers[sourceRegister];
-        uint newCpsr = Cpsr;
+        uint newPsr = useSpsr ? GetCurrentSpsr() : Cpsr;
 
         if ((fieldMask & 0x1) != 0)
         {
-            newCpsr = (newCpsr & 0xFFFFFF00) | (value & 0x000000FF);
+            newPsr = (newPsr & 0xFFFFFF00) | (value & 0x000000FF);
         }
 
         if ((fieldMask & 0x8) != 0)
         {
-            newCpsr = (newCpsr & 0x0FFFFFFF) | (value & 0xF0000000);
+            newPsr = (newPsr & 0x0FFFFFFF) | (value & 0xF0000000);
         }
 
-        SetCpsr(newCpsr);
+        if (useSpsr)
+        {
+            SetCurrentSpsr(newPsr);
+            return;
+        }
+
+        SetCpsr(newPsr);
     }
 
     private void ExecuteDataProcessingRegister(uint instruction)
@@ -647,13 +779,19 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (opcode == 0xA)
+        {
+            ExecuteCmpRegister(instruction);
+            return;
+        }
+
         if (opcode == 0xD)
         {
             ExecuteMovRegister(instruction);
             return;
         }
 
-        throw new NotSupportedException($"Unsupported data processing register opcode: 0x{opcode:X}");
+        throw new NotSupportedException($"Unsupported data processing register opcode: 0x{opcode:X} in instruction 0x{instruction:X8}");
     }
 
     private void ExecuteAndRegister(uint instruction)
@@ -711,6 +849,20 @@ public sealed class Arm7tdmiCpu
         uint result = left & right;
 
         SetNegativeAndZeroFlags(result);
+    }
+
+    private void ExecuteCmpRegister(uint instruction)
+    {
+        int sourceRegister = (int)((instruction >> 16) & 0xF);
+        int operandRegister = (int)(instruction & 0xF);
+
+        uint left = GetOperandRegisterValue(sourceRegister);
+        uint right = GetOperandRegisterValue(operandRegister);
+        uint result = left - right;
+
+        SetNegativeAndZeroFlags(result);
+        SetCarryFlagForSubtraction(left, right);
+        SetOverflowFlagForSubtraction(left, right, result);
     }
 
     private void ExecuteBranchExchange(uint instruction)
@@ -1389,6 +1541,16 @@ public sealed class Arm7tdmiCpu
         _registers[destinationRegister] = unchecked((uint)value);
     }
 
+    private void ExecuteThumbStoreWordRegisterOffset(ushort instruction)
+    {
+        int offsetRegister = (instruction >> 6) & 0x7;
+        int baseRegister = (instruction >> 3) & 0x7;
+        int sourceRegister = instruction & 0x7;
+        uint address = _registers[baseRegister] + _registers[offsetRegister];
+
+        _bus.Write32(address, _registers[sourceRegister]);
+    }
+
     private void ExecuteThumbSubImmediateFromRegister(ushort instruction)
     {
         int destinationRegister = (instruction >> 8) & 0x7;
@@ -1719,6 +1881,12 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (IsThumbStoreWordRegisterOffset(instruction))
+        {
+            ExecuteThumbStoreWordRegisterOffset(instruction);
+            return;
+        }
+
 
         ushort previous = _bus.Read16(Pc - 4);
         ushort current = _bus.Read16(Pc - 2);
@@ -1777,6 +1945,12 @@ public sealed class Arm7tdmiCpu
         if (IsSingleDataTransfer(instruction))
         {
             ExecuteSingleDataTransfer(instruction);
+            return;
+        }
+
+        if (IsBlockDataTransfer(instruction))
+        {
+            ExecuteBlockDataTransfer(instruction);
             return;
         }
 

@@ -75,6 +75,23 @@ public sealed class CpuInstructionTests
     }
 
     [Fact]
+    public void TeqImmediate_UpdatesZeroFlagWhenXorResultIsZero()
+    {
+        byte[] rom =
+        [
+            0x05, 0x00, 0xA0, 0xE3,
+            0x05, 0x00, 0x30, 0xE3
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+        cpu.Step();
+
+        Assert.True(cpu.ZeroFlagSet);
+    }
+
+    [Fact]
     public void Bne_LoopsUntilZeroFlagIsSet()
     {
         byte[] rom =
@@ -132,6 +149,28 @@ public sealed class CpuInstructionTests
         cpu.Step();
 
         Assert.Equal(0x12345678u, bus.Read32(0x02000004));
+    }
+
+    [Fact]
+    public void StmdbWithWriteback_StoresRegistersBelowBase()
+    {
+        byte[] rom =
+        [
+            0x00, 0x50, 0x2D, 0xE9
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+
+        cpu.SetRegisterForTesting(12, 0xCCCCCCCC);
+        cpu.SetRegisterForTesting(13, 0x03008000);
+        cpu.SetRegisterForTesting(14, 0xEEEEEEEE);
+
+        cpu.Step();
+
+        Assert.Equal(0x03007FF8u, cpu.GetRegister(13));
+        Assert.Equal(0xCCCCCCCCu, bus.Read32(0x03007FF8));
+        Assert.Equal(0xEEEEEEEEu, bus.Read32(0x03007FFC));
     }
 
     [Fact]
@@ -397,6 +436,21 @@ public sealed class CpuInstructionTests
     }
 
     [Fact]
+    public void AddImmediate_WhenSourceIsPcReadsCurrentInstructionAddressPlus8()
+    {
+        byte[] rom =
+        [
+            0x01, 0x00, 0x8F, 0xE2
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+
+        Assert.Equal(0x08000009u, cpu.GetRegister(0));
+    }
+
+    [Fact]
     public void TeqRegister_SetsZeroFlagWhenOperandsAreEqual()
     {
         byte[] rom =
@@ -501,6 +555,22 @@ public sealed class CpuInstructionTests
     }
 
     [Fact]
+    public void MsrSpsr_DoesNotChangeCurrentCpsr()
+    {
+        byte[] rom =
+        [
+            0x0E, 0xF0, 0x69, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        uint cpsr = cpu.Cpsr;
+
+        cpu.Step();
+
+        Assert.Equal(cpsr, cpu.Cpsr);
+    }
+
+    [Fact]
     public void LdrImmediate_WhenBaseIsPcUsesCurrentInstructionAddressPlus8()
     {
         byte[] rom =
@@ -553,6 +623,27 @@ public sealed class CpuInstructionTests
         cpu.Step();
 
         Assert.False(cpu.ZeroFlagSet);
+    }
+
+    [Fact]
+    public void CmpRegister_UpdatesFlagsWithoutChangingSourceRegister()
+    {
+        byte[] rom =
+        [
+            0x05, 0x00, 0xA0, 0xE3,
+            0x05, 0x10, 0xA0, 0xE3,
+            0x01, 0x00, 0x50, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+        cpu.Step();
+        cpu.Step();
+
+        Assert.Equal(5u, cpu.GetRegister(0));
+        Assert.True(cpu.ZeroFlagSet);
+        Assert.True(cpu.CarryFlagSet);
     }
 
     [Fact]
@@ -1289,6 +1380,26 @@ public sealed class CpuInstructionTests
         cpu.Step();
 
         Assert.Equal(0xFFFFFFFEu, cpu.GetRegister(1));
+    }
+
+    [Fact]
+    public void ThumbStoreWordRegisterOffset_StoresWordAtBasePlusOffsetRegister()
+    {
+        byte[] rom =
+        [
+            0x60, 0x50
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetRegisterForTesting(0, 0x12345678);
+        cpu.SetRegisterForTesting(4, 0x02000000);
+        cpu.SetRegisterForTesting(1, 4);
+
+        cpu.Step();
+
+        Assert.Equal(0x12345678u, bus.Read32(0x02000004));
     }
 
     [Fact]
