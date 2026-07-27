@@ -162,6 +162,21 @@ public sealed class Arm7tdmiCpu
         return (instruction & 0xF800) == 0x3800;
     }
 
+    private static bool IsThumbAddSubtractStackPointer(ushort instruction)
+    {
+        return (instruction & 0xFF00) == 0xB000;
+    }
+
+    private static bool IsThumbSpRelativeStore(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x9000;
+    }
+
+    private static bool IsThumbStoreWordImmediate(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x6000;
+    }
+
     private void SaveBankedRegisters()
     {
         switch (CurrentMode)
@@ -270,6 +285,11 @@ public sealed class Arm7tdmiCpu
     private static bool IsThumbPcRelativeLoad(ushort instruction)
     {
         return (instruction & 0xF800) == 0x4800;
+    }
+
+    private static bool IsThumbHighRegisterOperation(ushort instruction)
+    {
+        return (instruction & 0xFC00) == 0x4400;
     }
 
     private static bool IsHalfwordDataTransfer(uint instruction)
@@ -1064,6 +1084,78 @@ public sealed class Arm7tdmiCpu
         _bus.Write8(address, value);
     }
 
+    private void ExecuteThumbAddSubtractStackPointer(ushort instruction)
+    {
+        bool subtract = (instruction & (1 << 7)) != 0;
+        uint offset = (uint)(instruction & 0x7F) * 4;
+
+        if (subtract)
+        {
+            _registers[13] -= offset;
+        }
+        else
+        {
+            _registers[13] += offset;
+        }
+    }
+
+    private void ExecuteThumbSpRelativeStore(ushort instruction)
+    {
+        int sourceRegister = (instruction >> 8) & 0x7;
+        uint offset = (uint)(instruction & 0xFF) * 4;
+        uint address = _registers[13] + offset;
+
+        _bus.Write32(address, _registers[sourceRegister]);
+    }
+
+    private void ExecuteThumbHighRegisterOperation(ushort instruction)
+    {
+        int opcode = (instruction >> 8) & 0x3;
+        int highDestinationBit = (instruction >> 7) & 0x1;
+        int highSourceBit = (instruction >> 6) & 0x1;
+        int sourceRegister = ((highSourceBit << 3) | ((instruction >> 3) & 0x7));
+        int destinationRegister = ((highDestinationBit << 3) | (instruction & 0x7));
+
+        if (opcode == 0x2)
+        {
+            uint value = GetOperandRegisterValue(sourceRegister);
+            _registers[destinationRegister] = value;
+            return;
+        }
+
+        if (opcode == 0x3)
+        {
+            uint target = GetOperandRegisterValue(sourceRegister);
+
+            if ((target & 1) != 0)
+            {
+                Cpsr |= ThumbStateFlag;
+            }
+            else
+            {
+                Cpsr &= ~ThumbStateFlag;
+            }
+
+            Pc = target & 0xFFFFFFFE;
+            return;
+        }
+
+        throw new NotSupportedException(
+            $"Unsupported Thumb high register opcode: 0x{opcode:X} in instruction 0x{instruction:X4}");
+    }
+
+    private void ExecuteThumbStoreWordImmediate(ushort instruction)
+    {
+        int immediate5 = (instruction >> 6) & 0x1F;
+        int baseRegister = (instruction >> 3) & 0x7;
+        int sourceRegister = instruction & 0x7;
+
+        uint offset = (uint)immediate5 * 4;
+        uint address = _registers[baseRegister] + offset;
+
+        _bus.Write32(address, _registers[sourceRegister]);
+    }
+
     private void ExecuteThumbSubImmediateFromRegister(ushort instruction)
     {
         int destinationRegister = (instruction >> 8) & 0x7;
@@ -1286,6 +1378,29 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (IsThumbAddSubtractStackPointer(instruction))
+        {
+            ExecuteThumbAddSubtractStackPointer(instruction);
+            return;
+        }
+
+        if (IsThumbSpRelativeStore(instruction))
+        {
+            ExecuteThumbSpRelativeStore(instruction);
+            return;
+        }
+
+        if (IsThumbHighRegisterOperation(instruction))
+        {
+            ExecuteThumbHighRegisterOperation(instruction);
+            return;
+        }
+
+        if (IsThumbStoreWordImmediate(instruction))
+        {
+            ExecuteThumbStoreWordImmediate(instruction);
+            return;
+        }
 
 
         ushort previous = _bus.Read16(Pc - 4);
