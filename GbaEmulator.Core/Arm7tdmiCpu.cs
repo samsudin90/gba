@@ -1789,10 +1789,13 @@ public sealed class Arm7tdmiCpu
         if (ThumbState)
         {
             StepThumb();
-            return;
+        }
+        else
+        {
+            StepArm();
         }
 
-        StepArm();
+        _bus.Tick(1);
     }
 
 }

@@ -203,6 +203,20 @@ public sealed class CpuInstructionTests
     }
 
     [Fact]
+    public void MemoryBus_ReadsAndWritesVideoMemoryRegions()
+    {
+        MemoryBus bus = new MemoryBus([]);
+
+        bus.Write16(0x05000000, 0x001F);
+        bus.Write32(0x06000000, 0x12345678);
+        bus.Write16(0x07000000, 0x00FF);
+
+        Assert.Equal(0x001Fu, bus.Read16(0x05000000));
+        Assert.Equal(0x12345678u, bus.Read32(0x06000000));
+        Assert.Equal(0x00FFu, bus.Read16(0x07000000));
+    }
+
+    [Fact]
     public void KeyInput_DefaultsToNoButtonsPressed()
     {
         MemoryBus bus = new MemoryBus([]);
@@ -222,12 +236,55 @@ public sealed class CpuInstructionTests
     }
 
     [Fact]
-    public void VCount_AdvancesOnLowByteReads()
+    public void VCount_AdvancesWhenBusTicks()
     {
         MemoryBus bus = new MemoryBus([]);
 
         Assert.Equal(0x00, bus.Read8(0x04000006));
+        bus.Tick(64);
         Assert.Equal(0x01, bus.Read8(0x04000006));
+    }
+
+    [Fact]
+    public void IoRegister_ReadsBackWrittenValues()
+    {
+        MemoryBus bus = new MemoryBus([]);
+
+        bus.Write16(0x04000000, 0x1234);
+
+        Assert.Equal(0x1234u, bus.Read16(0x04000000));
+    }
+
+    [Fact]
+    public void InterruptFlag_WriteClearsSelectedBits()
+    {
+        MemoryBus bus = new MemoryBus([]);
+
+        for (int i = 0; i < 160 * 64; i++)
+        {
+            bus.Tick(1);
+        }
+
+        Assert.Equal(1, bus.Read8(0x04000202) & 1);
+
+        bus.Write8(0x04000202, 1);
+
+        Assert.Equal(0, bus.Read8(0x04000202) & 1);
+    }
+
+    [Fact]
+    public void Dma3_CopiesWordsAndClearsEnableBit()
+    {
+        MemoryBus bus = new MemoryBus([]);
+
+        bus.Write32(0x02000000, 0x12345678);
+        bus.Write32(0x040000D4, 0x02000000);
+        bus.Write32(0x040000D8, 0x03000000);
+        bus.Write16(0x040000DC, 1);
+        bus.Write16(0x040000DE, 0x8400);
+
+        Assert.Equal(0x12345678u, bus.Read32(0x03000000));
+        Assert.Equal(0u, bus.Read32(0x040000DC) & 0x80000000u);
     }
 
     [Fact]
