@@ -147,6 +147,21 @@ public sealed class Arm7tdmiCpu
         return (instruction & 0xF800) == 0xE000;
     }
 
+    private static bool IsThumbLoadByteImmediate(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x7800;
+    }
+
+    private static bool IsThumbStoreByteImmediate(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x7000;
+    }
+
+    private static bool IsThumbSubImmediateFromRegister(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x3800;
+    }
+
     private void SaveBankedRegisters()
     {
         switch (CurrentMode)
@@ -1026,6 +1041,43 @@ public sealed class Arm7tdmiCpu
         Pc = (uint)((int)Pc + offset);
     }
 
+    private void ExecuteThumbLoadByteImmediate(ushort instruction)
+    {
+        int immediate5 = (instruction >> 6) & 0x1F;
+        int baseRegister = (instruction >> 3) & 0x7;
+        int destinationRegister = instruction & 0x7;
+
+        uint address = _registers[baseRegister] + (uint)immediate5;
+
+        _registers[destinationRegister] = _bus.Read8(address);
+    }
+
+    private void ExecuteThumbStoreByteImmediate(ushort instruction)
+    {
+        int immediate5 = (instruction >> 6) & 0x1F;
+        int baseRegister = (instruction >> 3) & 0x7;
+        int sourceRegister = instruction & 0x7;
+
+        uint address = _registers[baseRegister] + (uint)immediate5;
+        byte value = (byte)(_registers[sourceRegister] & 0xFF);
+
+        _bus.Write8(address, value);
+    }
+
+    private void ExecuteThumbSubImmediateFromRegister(ushort instruction)
+    {
+        int destinationRegister = (instruction >> 8) & 0x7;
+        uint immediate = (uint)(instruction & 0xFF);
+        uint left = _registers[destinationRegister];
+        uint result = left - immediate;
+
+        _registers[destinationRegister] = result;
+
+        SetNegativeAndZeroFlags(result);
+        SetCarryFlagForSubtraction(left, immediate);
+        SetOverflowFlagForSubtraction(left, immediate, result);
+    }
+
     private static bool ShouldUpdateFlags(uint instruction)
     {
         return (instruction & (1u << 20)) != 0;
@@ -1215,6 +1267,26 @@ public sealed class Arm7tdmiCpu
             ExecuteThumbUnconditionalBranch(instruction);
             return;
         }
+
+        if (IsThumbLoadByteImmediate(instruction))
+        {
+            ExecuteThumbLoadByteImmediate(instruction);
+            return;
+        }
+
+        if (IsThumbStoreByteImmediate(instruction))
+        {
+            ExecuteThumbStoreByteImmediate(instruction);
+            return;
+        }
+
+        if (IsThumbSubImmediateFromRegister(instruction))
+        {
+            ExecuteThumbSubImmediateFromRegister(instruction);
+            return;
+        }
+
+
 
         throw new NotSupportedException($"Unsupported Thumb instruction: 0x{instruction:X4}");
     }
