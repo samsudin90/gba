@@ -181,6 +181,16 @@ public sealed class Arm7tdmiCpu
         return (instruction & 0xFE00) == 0xB400;
     }
 
+    private static bool IsThumbBlPrefix(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0xF000;
+    }
+
+    private static bool IsThumbPcRelativeLoad(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x4800;
+    }
+
     private static bool IsHalfwordDataTransfer(uint instruction)
     {
         return (instruction & 0x0E0000F0) == 0x000000B0;
@@ -630,6 +640,43 @@ public sealed class Arm7tdmiCpu
         _registers[13] -= (uint)(registerCount * 4);
     }
 
+    private void ExecuteThumbBl(ushort firstHalfword)
+    {
+        ushort secondHalfword = Fetch16();
+
+        if ((secondHalfword & 0xF800) != 0xF800)
+        {
+            throw new NotSupportedException(
+                $"Unsupported Thumb BL suffix: 0x{secondHalfword:X4}");
+        }
+
+        int offsetHigh = firstHalfword & 0x07FF;
+        int offsetLow = secondHalfword & 0x07FF;
+
+        int offset = (offsetHigh << 12) | (offsetLow << 1);
+
+        if ((offset & (1 << 22)) != 0)
+        {
+            offset |= unchecked((int)0xFF800000);
+        }
+
+        uint returnAddress = Pc | 1u;
+        uint target = (uint)((int)Pc + offset);
+
+        _registers[14] = returnAddress;
+        Pc = target & 0xFFFFFFFE;
+    }
+
+    private void ExecuteThumbPcRelativeLoad(ushort instruction)
+    {
+        int destinationRegister = (instruction >> 8) & 0x7;
+        uint immediate = (uint)(instruction & 0xFF) * 4;
+        uint pcBase = (Pc + 2) & 0xFFFFFFFC;
+        uint address = pcBase + immediate;
+
+        _registers[destinationRegister] = _bus.Read32(address);
+    }
+
     private static bool ShouldUpdateFlags(uint instruction)
     {
         return (instruction & (1u << 20)) != 0;
@@ -723,6 +770,18 @@ public sealed class Arm7tdmiCpu
         if (IsThumbPush(instruction))
         {
             ExecuteThumbPush(instruction);
+            return;
+        }
+
+        if (IsThumbBlPrefix(instruction))
+        {
+            ExecuteThumbBl(instruction);
+            return;
+        }
+
+        if (IsThumbPcRelativeLoad(instruction))
+        {
+            ExecuteThumbPcRelativeLoad(instruction);
             return;
         }
 

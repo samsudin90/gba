@@ -535,6 +535,42 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x080000F0u, bus.Read32(0x03007FFC));
     }
 
+    [Fact]
+    public void ThumbBl_SetsLinkRegisterAndBranches()
+    {
+        byte[] rom =
+        [
+            0x00, 0xF0,
+            0x00, 0xF8
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+
+        cpu.Step();
+
+        Assert.Equal(0x08000005u, cpu.GetRegister(14));
+        Assert.Equal(0x08000004u, cpu.Pc);
+    }
+
+    [Fact]
+    public void ThumbPcRelativeLoad_LoadsWordFromAlignedPcPlusImmediate()
+    {
+        byte[] rom =
+        [
+            0x00, 0x48,
+            0x00, 0x00,
+            0x78, 0x56, 0x34, 0x12
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+
+        cpu.Step();
+
+        Assert.Equal(0x12345678u, cpu.GetRegister(0));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);
