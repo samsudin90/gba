@@ -298,6 +298,38 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x08000000u, cpu.Pc);
     }
 
+    [Fact]
+    public void MovRegister_CopiesRegisterValue()
+    {
+        byte[] rom =
+        [
+            0x01, 0x10, 0xA0, 0xE3,
+            0x01, 0x20, 0xA0, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+        cpu.Step();
+
+        Assert.Equal(1u, cpu.GetRegister(2));
+    }
+
+    [Fact]
+    public void MovRegister_WhenSourceIsPcReadsCurrentInstructionAddressPlus8()
+    {
+        byte[] rom =
+        [
+            0x0F, 0xE0, 0xA0, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+
+        Assert.Equal(0x08000008u, cpu.GetRegister(14));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

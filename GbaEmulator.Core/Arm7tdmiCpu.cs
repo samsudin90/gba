@@ -39,6 +39,26 @@ public sealed class Arm7tdmiCpu
         }
     }
 
+    private uint GetOperandRegisterValue(int register)
+    {
+        if (register == 15)
+        {
+            return Pc + 4;
+        }
+
+        return _registers[register];
+    }
+
+    private static bool IsPsrTransfer(uint instruction)
+    {
+        return (instruction & 0x0DB00000) == 0x01200000;
+    }
+
+    private static bool IsDataProcessingRegister(uint instruction)
+    {
+        return (instruction & 0x0E000010) == 0x00000000;
+    }
+
     private static bool IsHalfwordDataTransfer(uint instruction)
     {
         return (instruction & 0x0E0000F0) == 0x000000B0;
@@ -323,6 +343,59 @@ public sealed class Arm7tdmiCpu
             }
         }
     }
+    
+    private void ExecutePsrTransfer(uint instruction)
+    {
+        bool isImmediateOperand = (instruction & (1u << 25)) != 0;
+        bool useSpsr = (instruction & (1u << 22)) != 0;
+
+        if (isImmediateOperand || useSpsr)
+        {
+            throw new NotSupportedException($"Unsupported PSR transfer: 0x{instruction:X8}");
+        }
+
+        int sourceRegister = (int)(instruction & 0xF);
+        uint fieldMask = (instruction >> 16) & 0xF;
+        uint value = _registers[sourceRegister];
+
+        if ((fieldMask & 0x1) != 0)
+        {
+            Cpsr = (Cpsr & 0xFFFFFF00) | (value & 0x000000FF);
+        }
+
+        if ((fieldMask & 0x8) != 0)
+        {
+            Cpsr = (Cpsr & 0x0FFFFFFF) | (value & 0xF0000000);
+        }
+    }
+
+    private void ExecuteDataProcessingRegister(uint instruction)
+    {
+        uint opcode = (instruction >> 21) & 0xF;
+
+        if (opcode == 0xD)
+        {
+            ExecuteMovRegister(instruction);
+            return;
+        }
+
+        throw new NotSupportedException($"Unsupported data processing register opcode: 0x{opcode:X}");
+    }
+
+    private void ExecuteMovRegister(uint instruction)
+    {
+        int destinationRegister = (int)((instruction >> 12) & 0xF);
+        int sourceRegister = (int)(instruction & 0xF);
+
+        uint operand = GetOperandRegisterValue(sourceRegister);
+
+        _registers[destinationRegister] = operand;
+
+        if (ShouldUpdateFlags(instruction))
+        {
+            SetNegativeAndZeroFlags(operand);
+        }
+    }
 
     private static bool ShouldUpdateFlags(uint instruction)
     {
@@ -423,6 +496,12 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (IsDataProcessingRegister(instruction))
+        {
+            ExecuteDataProcessingRegister(instruction);
+            return;
+        }
+
         if (IsDataProcessingImmediate(instruction))
         {
             ExecuteDataProcessingImmediate(instruction);
@@ -432,6 +511,12 @@ public sealed class Arm7tdmiCpu
         if (IsSingleDataTransfer(instruction))
         {
             ExecuteSingleDataTransfer(instruction);
+            return;
+        }
+
+        if (IsPsrTransfer(instruction))
+        {
+            ExecutePsrTransfer(instruction);
             return;
         }
 
