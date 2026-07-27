@@ -402,6 +402,38 @@ public sealed class CpuInstructionTests
         Assert.True(cpu.ThumbState);
     }
 
+    [Fact]
+    public void Msr_SwitchesBankedStackPointersBetweenIrqAndSystemModes()
+    {
+        byte[] rom =
+        [
+            0x12, 0x00, 0xA0, 0xE3,
+            0x00, 0xF0, 0x29, 0xE1,
+            0x11, 0xD0, 0xA0, 0xE3,
+            0x1F, 0x00, 0xA0, 0xE3,
+            0x00, 0xF0, 0x29, 0xE1,
+            0x22, 0xD0, 0xA0, 0xE3,
+            0x12, 0x00, 0xA0, 0xE3,
+            0x00, 0xF0, 0x29, 0xE1
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+        cpu.Step();
+        cpu.Step();
+        Assert.Equal(0x11u, cpu.GetRegister(13));
+
+        cpu.Step();
+        cpu.Step();
+        cpu.Step();
+        Assert.Equal(0x22u, cpu.GetRegister(13));
+
+        cpu.Step();
+        cpu.Step();
+        Assert.Equal(0x11u, cpu.GetRegister(13));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

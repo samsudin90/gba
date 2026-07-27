@@ -12,12 +12,25 @@ public sealed class Arm7tdmiCpu
     private const uint CarryFlag = 1u << 29;
     private const uint OverflowFlag = 1u << 28;
     private const uint ThumbStateFlag = 1u << 5;
+    private const uint UserMode = 0x10;
+    private const uint IrqMode = 0x12;
+    private const uint SupervisorMode = 0x13;
+    private const uint SystemMode = 0x1F;
+    private const uint ModeMask = 0x1F;
 
     public bool NegativeFlagSet => (Cpsr & NegativeFlag) != 0;
     public bool ZeroFlagSet => (Cpsr & ZeroFlag) != 0;
     public bool CarryFlagSet => (Cpsr & CarryFlag) != 0;
     public bool OverflowFlagSet => (Cpsr & OverflowFlag) != 0;
     public bool ThumbState => (Cpsr & ThumbStateFlag) != 0;
+    private uint CurrentMode => Cpsr & ModeMask;
+
+    private uint _userSystemR13;
+    private uint _userSystemR14;
+    private uint _irqR13;
+    private uint _irqR14;
+    private uint _supervisorR13;
+    private uint _supervisorR14;
 
     public uint Pc
     {
@@ -31,14 +44,76 @@ public sealed class Arm7tdmiCpu
 
         if (skipBios)
         {
+            Cpsr = SystemMode;
+            LoadBankedRegisters();
             Pc = 0x08000000;
-            Cpsr = 0x0000001F;
         }
         else
         {
-            Pc = 0x00000000;
             Cpsr = 0x000000D3;
+            LoadBankedRegisters();
+            Pc = 0x00000000;
         }
+    }
+
+    private void SaveBankedRegisters()
+    {
+        switch (CurrentMode)
+        {
+            case UserMode:
+            case SystemMode:
+                _userSystemR13 = _registers[13];
+                _userSystemR14 = _registers[14];
+                break;
+
+            case IrqMode:
+                _irqR13 = _registers[13];
+                _irqR14 = _registers[14];
+                break;
+
+            case SupervisorMode:
+                _supervisorR13 = _registers[13];
+                _supervisorR14 = _registers[14];
+                break;
+        }
+    }
+
+    private void LoadBankedRegisters()
+    {
+        switch (CurrentMode)
+        {
+            case UserMode:
+            case SystemMode:
+                _registers[13] = _userSystemR13;
+                _registers[14] = _userSystemR14;
+                break;
+
+            case IrqMode:
+                _registers[13] = _irqR13;
+                _registers[14] = _irqR14;
+                break;
+
+            case SupervisorMode:
+                _registers[13] = _supervisorR13;
+                _registers[14] = _supervisorR14;
+                break;
+        }
+    }
+
+    private void SetCpsr(uint value)
+    {
+        uint oldMode = CurrentMode;
+        uint newMode = value & ModeMask;
+
+        if (oldMode != newMode)
+        {
+            SaveBankedRegisters();
+            Cpsr = value;
+            LoadBankedRegisters();
+            return;
+        }
+
+        Cpsr = value;
     }
 
     private uint GetOperandRegisterValue(int register)
@@ -364,16 +439,19 @@ public sealed class Arm7tdmiCpu
         int sourceRegister = (int)(instruction & 0xF);
         uint fieldMask = (instruction >> 16) & 0xF;
         uint value = _registers[sourceRegister];
+        uint newCpsr = Cpsr;
 
         if ((fieldMask & 0x1) != 0)
         {
-            Cpsr = (Cpsr & 0xFFFFFF00) | (value & 0x000000FF);
+            newCpsr = (newCpsr & 0xFFFFFF00) | (value & 0x000000FF);
         }
 
         if ((fieldMask & 0x8) != 0)
         {
-            Cpsr = (Cpsr & 0x0FFFFFFF) | (value & 0xF0000000);
+            newCpsr = (newCpsr & 0x0FFFFFFF) | (value & 0xF0000000);
         }
+
+        SetCpsr(newCpsr);
     }
 
     private void ExecuteDataProcessingRegister(uint instruction)
@@ -526,6 +604,18 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (IsBranchExchange(instruction))
+        {
+            ExecuteBranchExchange(instruction);
+            return;
+        }
+
+        if (IsPsrTransfer(instruction))
+        {
+            ExecutePsrTransfer(instruction);
+            return;
+        }
+
         if (IsBranch(instruction))
         {
             ExecuteBranch(instruction);
@@ -538,33 +628,21 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
-        if (IsDataProcessingRegister(instruction))
-        {
-            ExecuteDataProcessingRegister(instruction);
-            return;
-        }
-
         if (IsDataProcessingImmediate(instruction))
         {
             ExecuteDataProcessingImmediate(instruction);
             return;
         }
 
+        if (IsDataProcessingRegister(instruction))
+        {
+            ExecuteDataProcessingRegister(instruction);
+            return;
+        }
+
         if (IsSingleDataTransfer(instruction))
         {
             ExecuteSingleDataTransfer(instruction);
-            return;
-        }
-
-        if (IsBranchExchange(instruction))
-        {
-            ExecuteBranchExchange(instruction);
-            return;
-        }
-
-        if (IsPsrTransfer(instruction))
-        {
-            ExecutePsrTransfer(instruction);
             return;
         }
 
