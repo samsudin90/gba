@@ -508,6 +508,33 @@ public sealed class CpuInstructionTests
         Assert.Equal(2u, cpu.GetRegister(2));
     }
 
+    [Fact]
+    public void ThumbPush_StoresRegistersAndLinkRegisterOnStack()
+    {
+        byte[] rom =
+        [
+            0x70, 0xB5
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+
+        cpu.SetRegisterForTesting(4, 0x44444444);
+        cpu.SetRegisterForTesting(5, 0x55555555);
+        cpu.SetRegisterForTesting(6, 0x66666666);
+        cpu.SetRegisterForTesting(13, 0x03008000);
+        cpu.SetRegisterForTesting(14, 0x080000F0);
+        cpu.SetThumbStateForTesting(true);
+
+        cpu.Step();
+
+        Assert.Equal(0x03007FF0u, cpu.GetRegister(13));
+        Assert.Equal(0x44444444u, bus.Read32(0x03007FF0));
+        Assert.Equal(0x55555555u, bus.Read32(0x03007FF4));
+        Assert.Equal(0x66666666u, bus.Read32(0x03007FF8));
+        Assert.Equal(0x080000F0u, bus.Read32(0x03007FFC));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

@@ -56,6 +56,31 @@ public sealed class Arm7tdmiCpu
         }
     }
 
+    private static int CountBits(byte value)
+    {
+        int count = 0;
+
+        while (value != 0)
+        {
+            count += value & 1;
+            value >>= 1;
+        }
+
+        return count;
+    }
+
+    public void SetThumbStateForTesting(bool value)
+    {
+        if (value)
+        {
+            Cpsr |= ThumbStateFlag;
+        }
+        else
+        {
+            Cpsr &= ~ThumbStateFlag;
+        }
+    }
+
     private void SaveBankedRegisters()
     {
         switch (CurrentMode)
@@ -149,6 +174,11 @@ public sealed class Arm7tdmiCpu
     private static bool IsDataProcessingRegister(uint instruction)
     {
         return (instruction & 0x0E000010) == 0x00000000;
+    }
+
+    private static bool IsThumbPush(ushort instruction)
+    {
+        return (instruction & 0xFE00) == 0xB400;
     }
 
     private static bool IsHalfwordDataTransfer(uint instruction)
@@ -569,6 +599,37 @@ public sealed class Arm7tdmiCpu
         Pc = target & 0xFFFFFFFE;
     }
 
+    private void ExecuteThumbPush(ushort instruction)
+    {
+        byte registerList = (byte)(instruction & 0xFF);
+        bool pushLr = (instruction & (1 << 8)) != 0;
+
+        int registerCount = CountBits(registerList);
+
+        if (pushLr)
+        {
+            registerCount++;
+        }
+
+        uint address = _registers[13] - (uint)(registerCount * 4);
+
+        for (int register = 0; register <= 7; register++)
+        {
+            if ((registerList & (1 << register)) != 0)
+            {
+                _bus.Write32(address, _registers[register]);
+                address += 4;
+            }
+        }
+
+        if (pushLr)
+        {
+            _bus.Write32(address, _registers[14]);
+        }
+
+        _registers[13] -= (uint)(registerCount * 4);
+    }
+
     private static bool ShouldUpdateFlags(uint instruction)
     {
         return (instruction & (1u << 20)) != 0;
@@ -634,6 +695,14 @@ public sealed class Arm7tdmiCpu
         };
     }
 
+    public ushort Fetch16()
+    {
+        ushort instruction = _bus.Read16(Pc);
+        Pc += 2;
+
+        return instruction;
+    }
+
     public uint Fetch32()
     {
         uint instruction = _bus.Read32(Pc);
@@ -647,7 +716,20 @@ public sealed class Arm7tdmiCpu
         return _registers[index];
     }
 
-    public void Step()
+    private void StepThumb()
+    {
+        ushort instruction = Fetch16();
+
+        if (IsThumbPush(instruction))
+        {
+            ExecuteThumbPush(instruction);
+            return;
+        }
+
+        throw new NotSupportedException($"Unsupported Thumb instruction: 0x{instruction:X4}");
+    }
+
+    private void StepArm()
     {
         uint instruction = Fetch32();
 
@@ -699,6 +781,18 @@ public sealed class Arm7tdmiCpu
         }
 
         throw new NotSupportedException($"Unsupported ARM instruction: 0x{instruction:X8}");
+        
+    }
+
+    public void Step()
+    {
+        if (ThumbState)
+        {
+            StepThumb();
+            return;
+        }
+
+        StepArm();
     }
 
 }
