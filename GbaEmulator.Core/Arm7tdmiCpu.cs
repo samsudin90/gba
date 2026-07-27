@@ -30,6 +30,11 @@ public sealed class Arm7tdmiCpu
         Cpsr = 0x0000001F;
     }
 
+    private static bool IsHalfwordDataTransfer(uint instruction)
+    {
+        return (instruction & 0x0E0000F0) == 0x000000B0;
+    }
+
     private static bool IsBranch(uint instruction)
     {
         return (instruction & 0x0E000000) == 0x0A000000;
@@ -227,6 +232,36 @@ public sealed class Arm7tdmiCpu
         throw new NotSupportedException($"Unsupported data processing immediate opcode: 0x{opcode:X}");
     }
 
+    private void ExecuteHalfwordDataTransfer(uint instruction)
+    {
+        bool isPreIndexed = (instruction & (1u << 24)) != 0;
+        bool addOffset = (instruction & (1u << 23)) != 0;
+        bool isImmediateOffset = (instruction & (1u << 22)) != 0;
+        bool writeBack = (instruction & (1u << 21)) != 0;
+        bool isLoad = (instruction & (1u << 20)) != 0;
+
+        uint operation = (instruction >> 5) & 0x3;
+
+        if (!isPreIndexed || !addOffset || !isImmediateOffset || writeBack || operation != 0x1)
+        {
+            throw new NotSupportedException($"Unsupported halfword data transfer: 0x{instruction:X8}");
+        }
+
+        int baseRegister = (int)((instruction >> 16) & 0xF);
+        int dataRegister = (int)((instruction >> 12) & 0xF);
+
+        uint address = _registers[baseRegister];
+
+        if (isLoad)
+        {
+            _registers[dataRegister] = _bus.Read16(address);
+        }
+        else
+        {
+            _bus.Write16(address, (ushort)(_registers[dataRegister] & 0xFFFF));
+        }
+    }
+
     private void ExecuteSingleDataTransfer(uint instruction)
     {
         bool isImmediateOffset = (instruction & (1u << 25)) == 0;
@@ -370,6 +405,12 @@ public sealed class Arm7tdmiCpu
         if (IsBranch(instruction))
         {
             ExecuteBranch(instruction);
+            return;
+        }
+
+        if (IsHalfwordDataTransfer(instruction))
+        {
+            ExecuteHalfwordDataTransfer(instruction);
             return;
         }
 

@@ -221,6 +221,44 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x03FFu, bus.Read16(0x04000130));
     }
 
+    [Fact]
+    public void Ldrh_LoadsKeyInputRegister()
+    {
+        byte[] rom =
+        [
+            0xB0, 0x00, 0xD1, 0xE1
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+
+        bus.SetButtonState(GbaButton.A, pressed: true);
+        cpu.SetRegisterForTesting(1, 0x04000130);
+
+        cpu.Step();
+
+        Assert.Equal(0x03FEu, cpu.GetRegister(0));
+    }
+
+    [Fact]
+    public void Strh_StoresLowerHalfwordToMemory()
+    {
+        byte[] rom =
+        [
+            0xB0, 0x00, 0xC1, 0xE1
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+
+        cpu.SetRegisterForTesting(0, 0x12345678);
+        cpu.SetRegisterForTesting(1, 0x02000000);
+
+        cpu.Step();
+
+        Assert.Equal(0x5678u, bus.Read16(0x02000000));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);
