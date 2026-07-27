@@ -489,6 +489,25 @@ public sealed class CpuInstructionTests
         Assert.False(cpu.ZeroFlagSet);
     }
 
+    [Fact]
+    public void AndRegister_StoresBitwiseAndResult()
+    {
+        byte[] rom =
+        [
+            0x03, 0x00, 0xA0, 0xE3,
+            0x02, 0x10, 0xA0, 0xE3,
+            0x01, 0x20, 0x00, 0xE0
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+
+        cpu.Step();
+        cpu.Step();
+        cpu.Step();
+
+        Assert.Equal(2u, cpu.GetRegister(2));
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

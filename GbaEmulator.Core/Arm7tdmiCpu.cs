@@ -468,9 +468,9 @@ public sealed class Arm7tdmiCpu
     {
         uint opcode = (instruction >> 21) & 0xF;
 
-        if (opcode == 0xD)
+        if (opcode == 0x0)
         {
-            ExecuteMovRegister(instruction);
+            ExecuteAndRegister(instruction);
             return;
         }
 
@@ -486,7 +486,31 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (opcode == 0xD)
+        {
+            ExecuteMovRegister(instruction);
+            return;
+        }
+
         throw new NotSupportedException($"Unsupported data processing register opcode: 0x{opcode:X}");
+    }
+
+    private void ExecuteAndRegister(uint instruction)
+    {
+        int sourceRegister = (int)((instruction >> 16) & 0xF);
+        int destinationRegister = (int)((instruction >> 12) & 0xF);
+        int operandRegister = (int)(instruction & 0xF);
+
+        uint left = GetOperandRegisterValue(sourceRegister);
+        uint right = GetOperandRegisterValue(operandRegister);
+        uint result = left & right;
+
+        _registers[destinationRegister] = result;
+
+        if (ShouldUpdateFlags(instruction))
+        {
+            SetNegativeAndZeroFlags(result);
+        }
     }
 
     private void ExecuteMovRegister(uint instruction)
