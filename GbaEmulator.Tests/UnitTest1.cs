@@ -259,6 +259,45 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x5678u, bus.Read16(0x02000000));
     }
 
+    [Fact]
+    public void MemoryBus_ReadsBiosWhenProvided()
+    {
+        byte[] bios = new byte[16 * 1024];
+        bios[0] = 0x12;
+        bios[0x3FFF] = 0x34;
+
+        MemoryBus bus = new MemoryBus([], bios);
+
+        Assert.Equal(0x12, bus.Read8(0x00000000));
+        Assert.Equal(0x34, bus.Read8(0x00003FFF));
+    }
+
+    [Fact]
+    public void MemoryBus_RejectsInvalidBiosSize()
+    {
+        byte[] invalidBios = new byte[123];
+
+        Assert.Throws<ArgumentException>(() => new MemoryBus([], invalidBios));
+    }
+
+    [Fact]
+    public void Cpu_StartsAtBiosWhenSkipBiosIsFalse()
+    {
+        MemoryBus bus = new MemoryBus([], new byte[16 * 1024]);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus, skipBios: false);
+
+        Assert.Equal(0x00000000u, cpu.Pc);
+    }
+
+    [Fact]
+    public void Cpu_SkipsBiosByDefault()
+    {
+        MemoryBus bus = new MemoryBus([]);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+
+        Assert.Equal(0x08000000u, cpu.Pc);
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

@@ -23,11 +23,20 @@ public sealed class Arm7tdmiCpu
         private set => _registers[15] = value;
     }
 
-    public Arm7tdmiCpu(MemoryBus bus)
+    public Arm7tdmiCpu(MemoryBus bus, bool skipBios = true)
     {
         _bus = bus;
-        Pc = 0x08000000;
-        Cpsr = 0x0000001F;
+
+        if (skipBios)
+        {
+            Pc = 0x08000000;
+            Cpsr = 0x0000001F;
+        }
+        else
+        {
+            Pc = 0x00000000;
+            Cpsr = 0x000000D3;
+        }
     }
 
     private static bool IsHalfwordDataTransfer(uint instruction)

@@ -16,15 +16,26 @@ public sealed class MemoryBus
     private const uint IoEnd = 0x040003FE;
     private const uint KeyInput = 0x04000130;
 
+    private const uint BiosStart = 0x00000000;
+    private const uint BiosEnd = 0x00003FFF;
+    private const int BiosSize = 16 * 1024;
+
     private readonly byte[] _rom;
+    private readonly byte[]? _bios;
 
     private readonly byte[] _ewram = new byte[EwramSize];
 
     private readonly byte[] _iwram = new byte[IwramSize];
 
-    public MemoryBus(byte[] rom)
+    public MemoryBus(byte[] rom, byte[]? bios = null)
     {
+        if (bios is not null && bios.Length != BiosSize)
+        {
+            throw new ArgumentException("GBA BIOS must be exactly 16 KiB.", nameof(bios));
+        }
+
         _rom = rom;
+        _bios = bios;
     }
 
     private static bool IsInRange(uint address, uint start, uint end)
@@ -53,6 +64,18 @@ public sealed class MemoryBus
 
     public byte Read8(uint address)
     {
+
+        if (IsInRange(address, BiosStart, BiosEnd))
+        {
+            if (_bios is null)
+            {
+                return 0x00;
+            }
+
+            uint biosOffset = address - BiosStart;
+            return _bios[(int)biosOffset];
+        }
+
         if (IsInRange(address, EwramStart, EwramEnd))
         {
             int ewramOffset = MirrorOffset(address, EwramStart, EwramSize);
