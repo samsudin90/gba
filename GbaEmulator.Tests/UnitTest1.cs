@@ -571,6 +571,240 @@ public sealed class CpuInstructionTests
         Assert.Equal(0x12345678u, cpu.GetRegister(0));
     }
 
+    [Fact]
+    public void ThumbMovImmediate_WritesImmediateToRegisterAndUpdatesFlags()
+    {
+        byte[] rom =
+        [
+            0x00, 0x21
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+
+        cpu.Step();
+
+        Assert.Equal(0u, cpu.GetRegister(1));
+        Assert.True(cpu.ZeroFlagSet);
+        Assert.False(cpu.NegativeFlagSet);
+    }
+
+    [Fact]
+    public void ThumbStoreHalfwordImmediate_StoresLowerHalfword()
+    {
+        byte[] rom =
+        [
+            0x11, 0x80
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+        cpu.SetThumbStateForTesting(true);
+
+        cpu.SetRegisterForTesting(1, 0x12345678);
+        cpu.SetRegisterForTesting(2, 0x02000000);
+
+        cpu.Step();
+
+        Assert.Equal(0x5678u, bus.Read16(0x02000000));
+    }
+
+    [Fact]
+    public void ThumbLoadHalfwordImmediate_LoadsHalfword()
+    {
+        byte[] rom =
+        [
+            0x4A, 0x89
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+        cpu.SetThumbStateForTesting(true);
+
+        cpu.SetRegisterForTesting(1, 0x02000000);
+        bus.Write16(0x0200000A, 0xBEEF);
+
+        cpu.Step();
+
+        Assert.Equal(0xBEEFu, cpu.GetRegister(2));
+    }
+
+    [Fact]
+    public void ThumbAddImmediate_AddsSmallImmediate()
+    {
+        byte[] rom =
+        [
+            0x20, 0x1C
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetRegisterForTesting(4, 0x12345678);
+
+        cpu.Step();
+
+        Assert.Equal(0x12345678u, cpu.GetRegister(0));
+        Assert.False(cpu.ZeroFlagSet);
+    }
+
+    [Fact]
+    public void ThumbAluAnd_StoresBitwiseAndResult()
+    {
+        byte[] rom =
+        [
+            0x10, 0x40
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+
+        cpu.SetRegisterForTesting(0, 0b1010);
+        cpu.SetRegisterForTesting(2, 0b0110);
+
+        cpu.Step();
+
+        Assert.Equal(0b0010u, cpu.GetRegister(0));
+        Assert.False(cpu.ZeroFlagSet);
+    }
+
+    [Fact]
+    public void ThumbAddImmediateToRegister_AddsImmediateAndUpdatesFlags()
+    {
+        byte[] rom =
+        [
+            0x0C, 0x31
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetRegisterForTesting(1, 4);
+
+        cpu.Step();
+
+        Assert.Equal(16u, cpu.GetRegister(1));
+        Assert.False(cpu.ZeroFlagSet);
+    }
+
+    [Fact]
+    public void ThumbPop_RestoresRegistersAndProgramCounter()
+    {
+        byte[] rom =
+        [
+            0x10, 0xBD
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetRegisterForTesting(13, 0x03007FF8);
+
+        bus.Write32(0x03007FF8, 0x44444444);
+        bus.Write32(0x03007FFC, 0x08000021);
+
+        cpu.Step();
+
+        Assert.Equal(0x44444444u, cpu.GetRegister(4));
+        Assert.Equal(0x08000020u, cpu.Pc);
+        Assert.True(cpu.ThumbState);
+        Assert.Equal(0x03008000u, cpu.GetRegister(13));
+    }
+
+    [Fact]
+    public void ThumbSwiRegisterRamReset_ClearsEwramWhenBitZeroIsSet()
+    {
+        byte[] rom =
+        [
+            0x01, 0xDF
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+        cpu.SetThumbStateForTesting(true);
+
+        bus.Write32(0x02000000, 0x12345678);
+        cpu.SetRegisterForTesting(0, 1);
+
+        cpu.Step();
+
+        Assert.Equal(0u, bus.Read32(0x02000000));
+    }
+
+    [Fact]
+    public void ThumbSwiRegisterRamReset_DoesNotClearTopOfIwram()
+    {
+        byte[] rom =
+        [
+            0x01, 0xDF
+        ];
+
+        MemoryBus bus = new MemoryBus(rom);
+        Arm7tdmiCpu cpu = new Arm7tdmiCpu(bus);
+        cpu.SetThumbStateForTesting(true);
+
+        bus.Write32(0x03000000, 0x11111111);
+        bus.Write32(0x03007F00, 0x22222222);
+        cpu.SetRegisterForTesting(0, 2);
+
+        cpu.Step();
+
+        Assert.Equal(0u, bus.Read32(0x03000000));
+        Assert.Equal(0x22222222u, bus.Read32(0x03007F00));
+    }
+
+    [Fact]
+    public void ThumbBx_BranchesToRegisterValueAndKeepsThumbWhenBitZeroIsSet()
+    {
+        byte[] rom =
+        [
+            0x70, 0x47
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetRegisterForTesting(14, 0x08001235);
+
+        cpu.Step();
+
+        Assert.Equal(0x08001234u, cpu.Pc);
+        Assert.True(cpu.ThumbState);
+    }
+
+    [Fact]
+    public void ThumbBx_SwitchesToArmWhenBitZeroIsClear()
+    {
+        byte[] rom =
+        [
+            0x70, 0x47
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetRegisterForTesting(14, 0x08001234);
+
+        cpu.Step();
+
+        Assert.Equal(0x08001234u, cpu.Pc);
+        Assert.False(cpu.ThumbState);
+    }
+
+    [Fact]
+    public void ThumbLslImmediate_ShiftsValueLeft()
+    {
+        byte[] rom =
+        [
+            0xC9, 0x04
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetRegisterForTesting(1, 1);
+
+        cpu.Step();
+
+        Assert.Equal(0x00080000u, cpu.GetRegister(1));
+        Assert.False(cpu.ZeroFlagSet);
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);

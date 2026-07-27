@@ -159,4 +159,14 @@ public sealed class MemoryBus
         Write16(address + 2, (ushort)(value >> 16));
     }
 
+    public void ClearEwram()
+    {
+        Array.Clear(_ewram);
+    }
+
+    public void ClearIwram()
+    {
+        Array.Clear(_iwram, 0, IwramSize - 0x200);
+    }
+
 }

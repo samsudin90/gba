@@ -81,6 +81,56 @@ public sealed class Arm7tdmiCpu
         }
     }
 
+    private static bool IsThumbMovImmediate(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x2000;
+    }
+
+    private static bool IsThumbStoreHalfwordImmediate(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x8000;
+    }
+
+    private static bool IsThumbLoadHalfwordImmediate(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x8800;
+    }
+
+    private static bool IsThumbAddSubtract(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x1800;
+    }
+
+    private static bool IsThumbAluOperation(ushort instruction)
+    {
+        return (instruction & 0xFC00) == 0x4000;
+    }
+
+    private static bool IsThumbAddImmediateToRegister(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x3000;
+    }
+
+    private static bool IsThumbPop(ushort instruction)
+    {
+        return (instruction & 0xFE00) == 0xBC00;
+    }
+
+    private static bool IsThumbSoftwareInterrupt(ushort instruction)
+    {
+        return (instruction & 0xFF00) == 0xDF00;
+    }
+
+    private static bool IsThumbBranchExchange(ushort instruction)
+    {
+        return (instruction & 0xFF87) == 0x4700;
+    }
+
+    private static bool IsThumbMoveShiftedRegister(ushort instruction)
+    {
+        return (instruction & 0xE000) == 0x0000;
+    }
+
     private void SaveBankedRegisters()
     {
         switch (CurrentMode)
@@ -677,6 +727,233 @@ public sealed class Arm7tdmiCpu
         _registers[destinationRegister] = _bus.Read32(address);
     }
 
+    private void ExecuteThumbMovImmediate(ushort instruction)
+    {
+        int destinationRegister = (instruction >> 8) & 0x7;
+        uint immediate = (uint)(instruction & 0xFF);
+
+        _registers[destinationRegister] = immediate;
+
+        SetNegativeAndZeroFlags(immediate);
+    }
+
+    private void ExecuteThumbStoreHalfwordImmediate(ushort instruction)
+    {
+        int immediate5 = (instruction >> 6) & 0x1F;
+        int baseRegister = (instruction >> 3) & 0x7;
+        int sourceRegister = instruction & 0x7;
+
+        uint offset = (uint)immediate5 * 2;
+        uint address = _registers[baseRegister] + offset;
+        ushort value = (ushort)(_registers[sourceRegister] & 0xFFFF);
+
+        _bus.Write16(address, value);
+    }
+
+    private void ExecuteThumbLoadHalfwordImmediate(ushort instruction)
+    {
+        int immediate5 = (instruction >> 6) & 0x1F;
+        int baseRegister = (instruction >> 3) & 0x7;
+        int destinationRegister = instruction & 0x7;
+
+        uint offset = (uint)immediate5 * 2;
+        uint address = _registers[baseRegister] + offset;
+
+        _registers[destinationRegister] = _bus.Read16(address);
+    }
+
+    private void ExecuteThumbAddSubtract(ushort instruction)
+    {
+        bool useImmediate = (instruction & (1 << 10)) != 0;
+        bool isSubtract = (instruction & (1 << 9)) != 0;
+
+        int operand = (instruction >> 6) & 0x7;
+        int sourceRegister = (instruction >> 3) & 0x7;
+        int destinationRegister = instruction & 0x7;
+
+        uint left = _registers[sourceRegister];
+        uint right = useImmediate ? (uint)operand : _registers[operand];
+        uint result;
+
+        if (isSubtract)
+        {
+            result = left - right;
+            _registers[destinationRegister] = result;
+
+            SetNegativeAndZeroFlags(result);
+            SetCarryFlagForSubtraction(left, right);
+            SetOverflowFlagForSubtraction(left, right, result);
+        }
+        else
+        {
+            result = left + right;
+            _registers[destinationRegister] = result;
+
+            SetNegativeAndZeroFlags(result);
+            SetCarryFlagForAddition(left, right, result);
+            SetOverflowFlagForAddition(left, right, result);
+        }
+    }
+
+    private void ExecuteThumbAluOperation(ushort instruction)
+    {
+        int opcode = (instruction >> 6) & 0xF;
+        int sourceRegister = (instruction >> 3) & 0x7;
+        int destinationRegister = instruction & 0x7;
+
+        if (opcode == 0x0)
+        {
+            uint result = _registers[destinationRegister] & _registers[sourceRegister];
+
+            _registers[destinationRegister] = result;
+            SetNegativeAndZeroFlags(result);
+            return;
+        }
+
+        throw new NotSupportedException(
+            $"Unsupported Thumb ALU opcode: 0x{opcode:X} in instruction 0x{instruction:X4}");
+    }
+
+    private void ExecuteThumbAddImmediateToRegister(ushort instruction)
+    {
+        int destinationRegister = (instruction >> 8) & 0x7;
+        uint immediate = (uint)(instruction & 0xFF);
+        uint left = _registers[destinationRegister];
+        uint result = left + immediate;
+
+        _registers[destinationRegister] = result;
+
+        SetNegativeAndZeroFlags(result);
+        SetCarryFlagForAddition(left, immediate, result);
+        SetOverflowFlagForAddition(left, immediate, result);
+    }
+
+    private void ExecuteThumbPop(ushort instruction)
+    {
+        byte registerList = (byte)(instruction & 0xFF);
+        bool popPc = (instruction & (1 << 8)) != 0;
+
+        uint address = _registers[13];
+
+        for (int register = 0; register <= 7; register++)
+        {
+            if ((registerList & (1 << register)) != 0)
+            {
+                _registers[register] = _bus.Read32(address);
+                address += 4;
+            }
+        }
+
+        if (popPc)
+        {
+            uint target = _bus.Read32(address);
+            address += 4;
+
+            if ((target & 1) != 0)
+            {
+                Cpsr |= ThumbStateFlag;
+            }
+            else
+            {
+                Cpsr &= ~ThumbStateFlag;
+            }
+
+            Pc = target & 0xFFFFFFFE;
+        }
+
+        _registers[13] = address;
+    }
+
+    private void ExecuteThumbSoftwareInterrupt(ushort instruction)
+    {
+        byte comment = (byte)(instruction & 0xFF);
+
+        if (comment == 0x01)
+        {
+            ExecuteRegisterRamReset();
+            return;
+        }
+
+        throw new NotSupportedException($"Unsupported BIOS SWI: 0x{comment:X2}");
+    }
+
+    private void ExecuteRegisterRamReset()
+    {
+        uint flags = _registers[0];
+
+        if ((flags & (1u << 0)) != 0)
+        {
+            _bus.ClearEwram();
+        }
+
+        if ((flags & (1u << 1)) != 0)
+        {
+            _bus.ClearIwram();
+        }
+    }
+
+    private void ExecuteThumbBranchExchange(ushort instruction)
+    {
+        int sourceRegister = ((instruction >> 3) & 0xF);
+        uint target = GetOperandRegisterValue(sourceRegister);
+
+        if ((target & 1) != 0)
+        {
+            Cpsr |= ThumbStateFlag;
+        }
+        else
+        {
+            Cpsr &= ~ThumbStateFlag;
+        }
+
+        Pc = target & 0xFFFFFFFE;
+    }
+
+    private void ExecuteThumbMoveShiftedRegister(ushort instruction)
+    {
+        int opcode = (instruction >> 11) & 0x3;
+        int offset = (instruction >> 6) & 0x1F;
+        int sourceRegister = (instruction >> 3) & 0x7;
+        int destinationRegister = instruction & 0x7;
+
+        if (opcode == 0x0)
+        {
+            ExecuteThumbLslImmediate(destinationRegister, sourceRegister, offset);
+            return;
+        }
+
+        throw new NotSupportedException(
+            $"Unsupported Thumb shift opcode: 0x{opcode:X} in instruction 0x{instruction:X4}");
+    }
+
+    private void ExecuteThumbLslImmediate(int destinationRegister, int sourceRegister, int offset)
+    {
+        uint value = _registers[sourceRegister];
+        uint result;
+
+        if (offset == 0)
+        {
+            result = value;
+        }
+        else
+        {
+            uint carryOut = (value >> (32 - offset)) & 1u;
+            result = value << offset;
+
+            if (carryOut != 0)
+            {
+                Cpsr |= CarryFlag;
+            }
+            else
+            {
+                Cpsr &= ~CarryFlag;
+            }
+        }
+
+        _registers[destinationRegister] = result;
+        SetNegativeAndZeroFlags(result);
+    }
+
     private static bool ShouldUpdateFlags(uint instruction)
     {
         return (instruction & (1u << 20)) != 0;
@@ -782,6 +1059,66 @@ public sealed class Arm7tdmiCpu
         if (IsThumbPcRelativeLoad(instruction))
         {
             ExecuteThumbPcRelativeLoad(instruction);
+            return;
+        }
+
+        if (IsThumbMovImmediate(instruction))
+        {
+            ExecuteThumbMovImmediate(instruction);
+            return;
+        }
+
+        if (IsThumbStoreHalfwordImmediate(instruction))
+        {
+            ExecuteThumbStoreHalfwordImmediate(instruction);
+            return;
+        }
+
+        if (IsThumbLoadHalfwordImmediate(instruction))
+        {
+            ExecuteThumbLoadHalfwordImmediate(instruction);
+            return;
+        }
+
+        if (IsThumbAddSubtract(instruction))
+        {
+            ExecuteThumbAddSubtract(instruction);
+            return;
+        }
+
+        if (IsThumbBranchExchange(instruction))
+        {
+            ExecuteThumbBranchExchange(instruction);
+            return;
+        }
+
+        if (IsThumbAluOperation(instruction))
+        {
+            ExecuteThumbAluOperation(instruction);
+            return;
+        }
+
+        if (IsThumbAddImmediateToRegister(instruction))
+        {
+            ExecuteThumbAddImmediateToRegister(instruction);
+            return;
+        }
+
+        if (IsThumbPop(instruction))
+        {
+            ExecuteThumbPop(instruction);
+            return;
+        }
+
+        if (IsThumbSoftwareInterrupt(instruction))
+        {
+            ExecuteThumbSoftwareInterrupt(instruction);
+            return;
+        }
+
+        if (IsThumbMoveShiftedRegister(instruction))
+        {
+            ExecuteThumbMoveShiftedRegister(instruction);
             return;
         }
 
