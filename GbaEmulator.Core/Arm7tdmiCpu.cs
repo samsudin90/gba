@@ -131,6 +131,22 @@ public sealed class Arm7tdmiCpu
         return (instruction & 0xE000) == 0x0000;
     }
 
+    private static bool IsThumbCmpImmediate(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0x2800;
+    }
+
+    private static bool IsThumbConditionalBranch(ushort instruction)
+    {
+        return (instruction & 0xF000) == 0xD000
+            && (instruction & 0x0F00) != 0x0F00;
+    }
+
+    private static bool IsThumbUnconditionalBranch(ushort instruction)
+    {
+        return (instruction & 0xF800) == 0xE000;
+    }
+
     private void SaveBankedRegisters()
     {
         switch (CurrentMode)
@@ -810,6 +826,15 @@ public sealed class Arm7tdmiCpu
             return;
         }
 
+        if (opcode == 0xC)
+        {
+            uint result = _registers[destinationRegister] | _registers[sourceRegister];
+
+            _registers[destinationRegister] = result;
+            SetNegativeAndZeroFlags(result);
+            return;
+        }
+
         throw new NotSupportedException(
             $"Unsupported Thumb ALU opcode: 0x{opcode:X} in instruction 0x{instruction:X4}");
     }
@@ -954,9 +979,79 @@ public sealed class Arm7tdmiCpu
         SetNegativeAndZeroFlags(result);
     }
 
+    private void ExecuteThumbCmpImmediate(ushort instruction)
+    {
+        int sourceRegister = (instruction >> 8) & 0x7;
+        uint immediate = (uint)(instruction & 0xFF);
+        uint left = _registers[sourceRegister];
+        uint result = left - immediate;
+
+        SetNegativeAndZeroFlags(result);
+        SetCarryFlagForSubtraction(left, immediate);
+        SetOverflowFlagForSubtraction(left, immediate, result);
+    }
+
+    private void ExecuteThumbConditionalBranch(ushort instruction)
+    {
+        uint condition = (uint)((instruction >> 8) & 0xF);
+
+        if (!ShouldExecuteCondition(condition))
+        {
+            return;
+        }
+
+        int offset = instruction & 0xFF;
+
+        if ((offset & 0x80) != 0)
+        {
+            offset |= unchecked((int)0xFFFFFF00);
+        }
+
+        offset <<= 1;
+
+        Pc = (uint)((int)Pc + offset);
+    }
+
+    private void ExecuteThumbUnconditionalBranch(ushort instruction)
+    {
+        int offset = instruction & 0x07FF;
+
+        if ((offset & 0x0400) != 0)
+        {
+            offset |= unchecked((int)0xFFFFF800);
+        }
+
+        offset <<= 1;
+
+        Pc = (uint)((int)Pc + offset);
+    }
+
     private static bool ShouldUpdateFlags(uint instruction)
     {
         return (instruction & (1u << 20)) != 0;
+    }
+
+    private bool ShouldExecuteCondition(uint condition)
+    {
+        return condition switch
+        {
+            0x0 => ZeroFlagSet,
+            0x1 => !ZeroFlagSet,
+            0x2 => CarryFlagSet,
+            0x3 => !CarryFlagSet,
+            0x4 => NegativeFlagSet,
+            0x5 => !NegativeFlagSet,
+            0x6 => OverflowFlagSet,
+            0x7 => !OverflowFlagSet,
+            0x8 => CarryFlagSet && !ZeroFlagSet,
+            0x9 => !CarryFlagSet || ZeroFlagSet,
+            0xA => NegativeFlagSet == OverflowFlagSet,
+            0xB => NegativeFlagSet != OverflowFlagSet,
+            0xC => !ZeroFlagSet && NegativeFlagSet == OverflowFlagSet,
+            0xD => ZeroFlagSet || NegativeFlagSet != OverflowFlagSet,
+            0xE => true,
+            _ => false
+        };
     }
 
     private void SetNegativeAndZeroFlags(uint result)
@@ -997,26 +1092,7 @@ public sealed class Arm7tdmiCpu
     private bool ShouldExecute(uint instruction)
     {
         uint condition = instruction >> 28;
-
-        return condition switch
-        {
-            0x0 => ZeroFlagSet,
-            0x1 => !ZeroFlagSet,
-            0x2 => CarryFlagSet,
-            0x3 => !CarryFlagSet,
-            0x4 => NegativeFlagSet,
-            0x5 => !NegativeFlagSet,
-            0x6 => OverflowFlagSet,
-            0x7 => !OverflowFlagSet,
-            0x8 => CarryFlagSet && !ZeroFlagSet,
-            0x9 => !CarryFlagSet || ZeroFlagSet,
-            0xA => NegativeFlagSet == OverflowFlagSet,
-            0xB => NegativeFlagSet != OverflowFlagSet,
-            0xC => !ZeroFlagSet && NegativeFlagSet == OverflowFlagSet,
-            0xD => ZeroFlagSet || NegativeFlagSet != OverflowFlagSet,
-            0xE => true,
-            _ => false
-        };
+        return ShouldExecuteCondition(condition);
     }
 
     public ushort Fetch16()
@@ -1119,6 +1195,24 @@ public sealed class Arm7tdmiCpu
         if (IsThumbMoveShiftedRegister(instruction))
         {
             ExecuteThumbMoveShiftedRegister(instruction);
+            return;
+        }
+
+        if (IsThumbCmpImmediate(instruction))
+        {
+            ExecuteThumbCmpImmediate(instruction);
+            return;
+        }
+
+        if (IsThumbConditionalBranch(instruction))
+        {
+            ExecuteThumbConditionalBranch(instruction);
+            return;
+        }
+
+        if (IsThumbUnconditionalBranch(instruction))
+        {
+            ExecuteThumbUnconditionalBranch(instruction);
             return;
         }
 

@@ -805,6 +805,113 @@ public sealed class CpuInstructionTests
         Assert.False(cpu.ZeroFlagSet);
     }
 
+    [Fact]
+    public void ThumbAluOrr_StoresBitwiseOrResult()
+    {
+        byte[] rom =
+        [
+            0x11, 0x43
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+
+        cpu.SetRegisterForTesting(1, 0b1000);
+        cpu.SetRegisterForTesting(2, 0b0011);
+
+        cpu.Step();
+
+        Assert.Equal(0b1011u, cpu.GetRegister(1));
+        Assert.False(cpu.ZeroFlagSet);
+    }
+
+    [Fact]
+    public void ThumbCmpImmediate_SetsZeroFlagWhenEqual()
+    {
+        byte[] rom =
+        [
+            0x00, 0x29
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetRegisterForTesting(1, 0);
+
+        cpu.Step();
+
+        Assert.True(cpu.ZeroFlagSet);
+        Assert.True(cpu.CarryFlagSet);
+        Assert.False(cpu.NegativeFlagSet);
+    }
+
+    [Fact]
+    public void ThumbCmpImmediate_ClearsZeroFlagWhenDifferent()
+    {
+        byte[] rom =
+        [
+            0x00, 0x29
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetRegisterForTesting(1, 5);
+
+        cpu.Step();
+
+        Assert.False(cpu.ZeroFlagSet);
+        Assert.True(cpu.CarryFlagSet);
+    }
+
+    [Fact]
+    public void ThumbConditionalBranch_BeqBranchesWhenZeroFlagSet()
+    {
+        byte[] rom =
+        [
+            0x02, 0xD0
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetZeroFlagForTesting(true);
+
+        cpu.Step();
+
+        Assert.Equal(0x08000006u, cpu.Pc);
+    }
+
+    [Fact]
+    public void ThumbConditionalBranch_BeqDoesNotBranchWhenZeroFlagClear()
+    {
+        byte[] rom =
+        [
+            0x02, 0xD0
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+        cpu.SetZeroFlagForTesting(false);
+
+        cpu.Step();
+
+        Assert.Equal(0x08000002u, cpu.Pc);
+    }
+
+    [Fact]
+    public void ThumbUnconditionalBranch_BranchesForward()
+    {
+        byte[] rom =
+        [
+            0x09, 0xE0
+        ];
+
+        Arm7tdmiCpu cpu = CreateCpu(rom);
+        cpu.SetThumbStateForTesting(true);
+
+        cpu.Step();
+
+        Assert.Equal(0x08000014u, cpu.Pc);
+    }
+
     private static Arm7tdmiCpu CreateCpu(byte[] rom)
     {
         MemoryBus bus = new MemoryBus(rom);
